@@ -1,12 +1,10 @@
-# uwindsor-findit
+# uwindsor-findit — Documentation
 
-Project skeleton for a Django 5.2 app (Docker-first, local-friendly).
+This folder contains living project docs for onboarding and collaboration.
 
-## Running (later)
-- Docker / DevContainer: recommended for consistent setup
-- Local: supported via venv + pip
+- **SETUP.md** — how to run the project (Docker/DevContainer or local)
+- **PROJECT_STRUCTURE.md** — apps/modules responsibilities and routing
+- **CODING_STYLE.md** — Django conventions and separation of concerns
+- **BRANCHING_STYLE.md** — Git flow + PR rules
 
-## Repo conventions
-- `config/` = Django project settings package (created in Phase 1)
-- `apps/` = Django apps (auth, chat, etc.) (created in Phase 4)
-- `.env.example` = env vars template (never commit real secrets)
+> Keep these docs short, practical, and updated. If a doc changes behavior, update the README and any scripts accordingly.
