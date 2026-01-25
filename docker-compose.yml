@@ -1,0 +1,38 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: uwindsor-findit-web
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:cached
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    # Keep the container alive for devcontainer + manual commands
+    command: ["bash", "-lc", "tail -f /dev/null"]
+
+  db:
+    image: postgres:16-alpine
+    container_name: uwindsor-findit-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-findit}
+      POSTGRES_USER: ${POSTGRES_USER:-findit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-findit}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

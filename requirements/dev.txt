@@ -1,0 +1,8 @@
+-r base.txt
+
+# Dev tooling (optional but helpful)
+ruff
+black
+pytest
+pytest-django
+python-dotenv
