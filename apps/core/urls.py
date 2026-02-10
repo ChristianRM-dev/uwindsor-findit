@@ -1,10 +1,11 @@
 from django.urls import path
 
-from .views import dashboard_view, home_view
+from apps.core import views
 
 app_name = "core"
 
 urlpatterns = [
-    path("", home_view, name="home"),
-    path("dashboard/", dashboard_view, name="dashboard"),
+    path("", views.home_view, name="home"),
+    path("dashboard/", views.dashboard_view, name="dashboard"),
+    path("demo/components/", views.components_demo_view, name="components_demo"),
 ]
