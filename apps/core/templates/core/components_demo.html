@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Components Demo | FindIt{% endblock %}
+
+{% block content %}
+
+{# Page header (usa el partial que ya definimos) #}
+{% include "partials/page_header.html" %}
+{% block page_title %}Components Demo{% endblock %}
+{% block page_subtitle %}
+  <div class="text-muted small">
+    A playground page to preview shared UI components (Bootstrap 5).
+  </div>
+{% endblock %}
+{% block page_actions %}
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'core:home' %}">
+    <i class="bi bi-house-door me-1"></i> Back to Home
+  </a>
+{% endblock %}
+
+<div class="row g-3">
+
+  <!-- Alerts demo -->
+  <div class="col-12">
+    <div class="bg-white border rounded shadow-sm p-3 p-md-4">
+      <h2 class="h6 mb-3">Alerts (flash messages)</h2>
+      <div class="alert alert-success" role="alert">
+        <i class="bi bi-check-circle me-1"></i> Success message example.
+      </div>
+      <div class="alert alert-warning" role="alert">
+        <i class="bi bi-exclamation-triangle me-1"></i> Warning message example.
+      </div>
+      <div class="alert alert-danger" role="alert">
+        <i class="bi bi-x-circle me-1"></i> Error message example.
+      </div>
+      <div class="alert alert-info mb-0" role="alert">
+        <i class="bi bi-info-circle me-1"></i> Info message example.
+      </div>
+      <p class="text-muted small mt-3 mb-0">
+        Real messages appear via <code>partials/messages.html</code> (Django messages framework).
+      </p>
+    </div>
+  </div>
+
+  <!-- Empty state demo -->
+  <div class="col-12 col-lg-6">
+    <div class="bg-white border rounded shadow-sm p-3 p-md-4 h-100">
+      <h2 class="h6 mb-3">Empty state</h2>
+      {% include "partials/empty_state.html" with title="No items found" message="Try changing filters or search keywords." cta_url="/" cta_label="Go Home" %}
+    </div>
+  </div>
+
+  <!-- Status badges demo -->
+  <div class="col-12 col-lg-6">
+    <div class="bg-white border rounded shadow-sm p-3 p-md-4 h-100">
+      <h2 class="h6 mb-3">Status badges</h2>
+      <div class="d-flex flex-wrap gap-2">
+        {% include "partials/status_badge.html" with status="lost" %}
+        {% include "partials/status_badge.html" with status="found" %}
+        {% include "partials/status_badge.html" with status="claimed" %}
+        {% include "partials/status_badge.html" with status="returned" %}
+        {% include "partials/status_badge.html" with status="rejected" %}
+      </div>
+      <p class="text-muted small mt-3 mb-0">
+        Badge styling is centralized in <code>partials/status_badge.html</code>.
+      </p>
+    </div>
+  </div>
+
+  <!-- Item cards demo -->
+  <div class="col-12">
+    <div class="bg-white border rounded shadow-sm p-3 p-md-4">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <h2 class="h6 mb-0">Item cards (grid)</h2>
+        <span class="text-muted small">Example layout used in Browse/Search pages</span>
+      </div>
+
+      <div class="row g-3">
+
+        <div class="col-12 col-md-6 col-lg-4">
+          {% include "partials/item_card.html" with item=demo_item_1 show_owner_actions=True %}
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-4">
+          {% include "partials/item_card.html" with item=demo_item_2 show_owner_actions=False %}
+        </div>
+
+        <div class="col-12 col-md-6 col-lg-4">
+          {% include "partials/item_card.html" with item=demo_item_3 show_owner_actions=False %}
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Pagination demo -->
+  <div class="col-12">
+    <div class="bg-white border rounded shadow-sm p-3 p-md-4">
+      <h2 class="h6 mb-3">Pagination</h2>
+      <p class="text-muted small">
+        This is a mock. Real pagination expects <code>page_obj</code> from a Django paginator.
+      </p>
+
+      <nav aria-label="Mock pagination">
+        <ul class="pagination justify-content-center mb-0">
+          <li class="page-item disabled"><span class="page-link">Previous</span></li>
+          <li class="page-item disabled"><span class="page-link">Page 1 of 3</span></li>
+          <li class="page-item"><a class="page-link" href="#">Next</a></li>
+        </ul>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Delete modal demo -->
+  <div class="col-12">
+    <div class="bg-white border rounded shadow-sm p-3 p-md-4">
+      <h2 class="h6 mb-3">Confirm delete modal</h2>
+      <p class="text-muted small">
+        Click the button to open the shared modal from <code>partials/confirm_delete_modal.html</code>.
+      </p>
+
+      <button
+        class="btn btn-outline-danger"
+        type="button"
+        data-bs-toggle="modal"
+        data-bs-target="#confirmDeleteModal"
+        data-delete-url="/demo/delete/"
+      >
+        <i class="bi bi-trash me-1"></i> Open delete modal
+      </button>
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,39 @@
+<div class="card h-100 shadow-sm">
+  {% comment %} Thumbnail placeholder (cuando tengas imágenes, reemplaza por <img> ) {% endcomment %}
+  <div class="ratio ratio-16x9 bg-light border-bottom d-flex align-items-center justify-content-center text-muted small">
+    No image
+  </div>
+
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-2">
+      <h3 class="h6 mb-1 text-truncate" title="{{ item.title }}">{{ item.title }}</h3>
+      {% include "partials/status_badge.html" with status=item.status %}
+    </div>
+
+    <div class="text-muted small mb-2">
+      {{ item.category }} • {{ item.location }}
+    </div>
+
+    <div class="text-muted small">
+      <i class="bi bi-clock me-1"></i>
+      {{ item.reported_at|date:"M d, Y" }}
+    </div>
+  </div>
+
+  <div class="card-footer bg-white d-flex justify-content-between align-items-center">
+    <a class="btn btn-outline-primary btn-sm" href="/items/{{ item.id }}/">
+      View details
+    </a>
+
+    {% if show_owner_actions %}
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary btn-sm" href="/items/{{ item.id }}/edit/">Edit</a>
+        <button class="btn btn-outline-danger btn-sm" type="button"
+          data-bs-toggle="modal" data-bs-target="#confirmDeleteModal"
+          data-delete-url="/items/{{ item.id }}/delete/">
+          Delete
+        </button>
+      </div>
+    {% endif %}
+  </div>
+</div>
