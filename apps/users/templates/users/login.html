@@ -1,57 +1,60 @@
-{% extends "base.html" %}
+{% extends "layouts/auth_base.html" %}
 
 {% block title %}Login | FindIt{% endblock %}
 
-{% block content %}
-<div class="row justify-content-center">
-  <div class="col-12 col-md-6 col-lg-5">
-    <div class="card shadow-sm">
-      <div class="card-body p-4">
-        <h1 class="h4 mb-1">Login</h1>
-        <p class="text-muted mb-4">Use your email (your username is your email).</p>
+{% block auth_icon %}
+  <i class="bi bi-box-arrow-in-right fs-4 text-primary"></i>
+{% endblock %}
 
-        <form method="post" novalidate>
-          {% csrf_token %}
+{% block auth_title %}Welcome back{% endblock %}
+{% block auth_subtitle %}Login with your UWindsor email to access the dashboard.{% endblock %}
 
-          <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input
-              type="text"
-              name="username"
-              class="form-control"
-              placeholder="name@uwindsor.ca"
-              value="{{ request.POST.username|default:'' }}"
-              required
-            />
-          </div>
+{% block auth_body %}
+<form method="post" novalidate>
+  {% csrf_token %}
 
-          <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input
-              type="password"
-              name="password"
-              class="form-control"
-              required
-            />
-          </div>
-
-          {% if form.non_field_errors %}
-            <div class="alert alert-danger">
-              {{ form.non_field_errors|striptags }}
-            </div>
-          {% endif %}
-
-          <button class="btn btn-primary w-100" type="submit">
-            <i class="bi bi-box-arrow-in-right me-1"></i> Login
-          </button>
-        </form>
-
-        <div class="mt-3 text-center">
-          <span class="text-muted">No account?</span>
-          <a href="{% url 'users:register' %}">Register</a>
-        </div>
-      </div>
-    </div>
+  {# If you want to render Django form fields cleanly #}
+  <div class="mb-3">
+    <label class="form-label" for="id_username">Email</label>
+    <input
+      type="email"
+      name="username"
+      class="form-control"
+      id="id_username"
+      placeholder="name@uwindsor.ca"
+      required
+      autofocus
+    />
   </div>
-</div>
+
+  <div class="mb-3">
+    <label class="form-label" for="id_password">Password</label>
+    <input
+      type="password"
+      name="password"
+      class="form-control"
+      id="id_password"
+      placeholder="Your password"
+      required
+    />
+  </div>
+
+  <button class="btn btn-primary w-100" type="submit">
+    <i class="bi bi-box-arrow-in-right me-1"></i> Login
+  </button>
+
+  <div class="d-flex justify-content-between mt-3">
+    <a class="link-secondary small text-decoration-none" href="{% url 'users:register' %}">
+      Create account
+    </a>
+
+    <a class="link-secondary small text-decoration-none" href="{% url 'users:password_reset' %}">
+      Forgot password?
+    </a>
+  </div>
+</form>
+{% endblock %}
+
+{% block auth_footer %}
+
 {% endblock %}

@@ -1,7 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.forms import AuthenticationForm
-from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
@@ -20,17 +19,15 @@ def register_view(request: HttpRequest) -> HttpResponse:
         if form.is_valid():
             user = form.save()
 
-            # Auto-login after successful registration
-            # We authenticate using username=email because we set username=email in the form.
             raw_password = form.cleaned_data.get("password1")
             authed = authenticate(request, username=user.username, password=raw_password)
+
             if authed is not None:
                 login(request, authed)
-                messages.success(request, "Account created successfully.")
-                return redirect("core:dashboard")
+            else:
+                # Fallback: login directly
+                login(request, user)
 
-            # Fallback: if authentication fails for some reason
-            login(request, user)
             messages.success(request, "Account created successfully.")
             return redirect("core:dashboard")
 
@@ -62,3 +59,15 @@ def logout_view(request: HttpRequest) -> HttpResponse:
     logout(request)
     messages.info(request, "You have been logged out.")
     return redirect("core:home")
+
+
+@require_http_methods(["GET"])
+def password_recovery_view(request: HttpRequest) -> HttpResponse:
+    """
+    This view only renders the password recovery page.
+    The real reset flow is handled by Django's built-in auth views (PasswordResetView, etc.).
+    """
+    if request.user.is_authenticated:
+        return redirect("core:dashboard")
+
+    return render(request, "users/password_recovery.html")
