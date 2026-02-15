@@ -3,11 +3,11 @@
 {% block title %}Login | FindIt{% endblock %}
 
 {% block auth_icon %}
-  <i class="bi bi-box-arrow-in-right fs-4 text-primary"></i>
+<i class="bi bi-box-arrow-in-right fs-4 text-primary"></i>
 {% endblock %}
 
 {% block auth_title %}Welcome back{% endblock %}
-{% block auth_subtitle %}Login with your UWindsor email to access the dashboard.{% endblock %}
+{% block auth_subtitle %}Login with your UWindsor email to access.{% endblock %}
 
 {% block auth_body %}
 <form method="post" novalidate>
@@ -16,28 +16,27 @@
   {# If you want to render Django form fields cleanly #}
   <div class="mb-3">
     <label class="form-label" for="id_username">Email</label>
-    <input
-      type="email"
-      name="username"
-      class="form-control"
-      id="id_username"
-      placeholder="name@uwindsor.ca"
-      required
-      autofocus
-    />
+    <input type="email" name="username" class="form-control" id="id_username" placeholder="name@uwindsor.ca" required
+      autofocus />
   </div>
+
+
 
   <div class="mb-3">
     <label class="form-label" for="id_password">Password</label>
-    <input
-      type="password"
-      name="password"
-      class="form-control"
-      id="id_password"
-      placeholder="Your password"
-      required
-    />
+
+    <div class="input-group">
+      <input type="password" name="password" class="form-control" id="id_password" placeholder="Your password"
+        required />
+
+      <button class="btn btn-outline-secondary" type="button" data-password-toggle data-target="#id_password"
+        aria-label="Show" title="Show/Hide">
+        <i class="bi bi-eye" data-role="icon"></i>
+        <span class="ms-1 d-none d-sm-inline" data-role="label">Show</span>
+      </button>
+    </div>
   </div>
+
 
   <button class="btn btn-primary w-100" type="submit">
     <i class="bi bi-box-arrow-in-right me-1"></i> Login

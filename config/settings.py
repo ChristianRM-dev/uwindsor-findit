@@ -157,3 +157,10 @@ LOGOUT_REDIRECT_URL = "/"
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "no-reply@findit.local"
 
+# Email verification toggle
+REQUIRE_EMAIL_VERIFICATION = False  
+
+# Token expiration (seconds)
+EMAIL_VERIFICATION_TOKEN_MAX_AGE = 60 * 60 * 24  # 24h
+
+
