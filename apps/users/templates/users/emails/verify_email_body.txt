@@ -1,0 +1,10 @@
+Hi,
+
+Thanks for registering on FindIt.
+
+Verify your email by clicking this link:
+{{ verify_url }}
+
+If you did not create this account, you can ignore this email.
+
+— FindIt

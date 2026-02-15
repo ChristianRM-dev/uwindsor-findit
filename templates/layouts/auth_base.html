@@ -1,0 +1,35 @@
+{% extends "_base_core.html" %}
+
+{% block body_class %}bg-light{% endblock %}
+
+{% block body %}
+  <main class="container py-5">
+    {% include "partials/messages.html" %}
+
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-8 col-lg-5">
+
+        <div class="text-center mb-3">
+          <div class="d-inline-flex align-items-center justify-content-center bg-white border rounded-circle shadow-sm"
+               style="width: 56px; height: 56px;">
+            {% block auth_icon %}
+              <i class="bi bi-shield-lock fs-4 text-primary"></i>
+            {% endblock %}
+          </div>
+
+          <h1 class="h4 mt-3 mb-1">{% block auth_title %}Auth{% endblock %}</h1>
+          <p class="text-muted small mb-0">{% block auth_subtitle %}{% endblock %}</p>
+        </div>
+
+        <div class="bg-white border rounded shadow-sm p-4">
+          {% block auth_body %}{% endblock %}
+        </div>
+
+        <div class="text-center mt-3 small">
+          {% block auth_footer %}{% endblock %}
+        </div>
+
+      </div>
+    </div>
+  </main>
+{% endblock %}

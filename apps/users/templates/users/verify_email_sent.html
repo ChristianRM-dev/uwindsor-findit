@@ -1,0 +1,25 @@
+{% extends "layouts/auth_base.html" %}
+
+{% block title %}Verify your email | FindIt{% endblock %}
+
+{% block auth_icon %}
+  <i class="bi bi-envelope-check fs-4 text-primary"></i>
+{% endblock %}
+
+{% block auth_title %}Check your email{% endblock %}
+{% block auth_subtitle %}We sent a verification link. Please open it to activate your account.{% endblock %}
+
+{% block auth_body %}
+<p class="text-muted mb-0">
+  If you don’t see it, check your spam folder.
+</p>
+<div class="mt-3">
+  <a class="btn btn-outline-primary w-100" href="{% url 'users:login' %}">
+    Back to login
+  </a>
+</div>
+{% endblock %}
+
+{% block auth_footer %}
+  <a class="text-decoration-none" href="{% url 'core:home' %}">Back to Home</a>
+{% endblock %}

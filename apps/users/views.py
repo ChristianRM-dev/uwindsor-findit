@@ -1,12 +1,15 @@
 from django.contrib import messages
-from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth import login, logout
 from django.contrib.auth.forms import AuthenticationForm
-from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
+from django.core.signing import BadSignature, SignatureExpired
+from django.contrib.auth import get_user_model
 
 from .forms import RegisterForm
+from .services.registration import create_user_from_register_form, handle_post_registration
+from .services.email_verification import unsign_verification_token
 
 
 @require_http_methods(["GET", "POST"])
@@ -18,19 +21,20 @@ def register_view(request: HttpRequest) -> HttpResponse:
 
     if request.method == "POST":
         if form.is_valid():
-            user = form.save()
-
-            # Auto-login after successful registration
-            # We authenticate using username=email because we set username=email in the form.
+            user = create_user_from_register_form(form)
             raw_password = form.cleaned_data.get("password1")
-            authed = authenticate(request, username=user.username, password=raw_password)
-            if authed is not None:
-                login(request, authed)
-                messages.success(request, "Account created successfully.")
-                return redirect("core:dashboard")
 
-            # Fallback: if authentication fails for some reason
-            login(request, user)
+            result = handle_post_registration(request, user, raw_password)
+
+            if result["verification_required"]:
+                messages.info(
+                    request,
+                    "We sent a verification email. Please confirm to activate your account.",
+                )
+                return redirect("users:verify_email_sent")
+
+            authed = result["authed_user"]
+            login(request, authed or user)
             messages.success(request, "Account created successfully.")
             return redirect("core:dashboard")
 
@@ -48,7 +52,13 @@ def login_view(request: HttpRequest) -> HttpResponse:
 
     if request.method == "POST":
         if form.is_valid():
-            login(request, form.get_user())
+            user = form.get_user()
+
+            if not user.is_active:
+                messages.error(request, "Your account is not active. Please verify your email first.")
+                return render(request, "users/login.html", {"form": form})
+
+            login(request, user)
             messages.success(request, "Welcome back!")
             return redirect("core:dashboard")
 
@@ -62,3 +72,46 @@ def logout_view(request: HttpRequest) -> HttpResponse:
     logout(request)
     messages.info(request, "You have been logged out.")
     return redirect("core:home")
+
+
+@require_http_methods(["GET"])
+def password_recovery_view(request: HttpRequest) -> HttpResponse:
+    if request.user.is_authenticated:
+        return redirect("core:dashboard")
+    return render(request, "users/password_recovery.html")
+
+
+@require_http_methods(["GET"])
+def verify_email_sent_view(request: HttpRequest) -> HttpResponse:
+    if request.user.is_authenticated:
+        return redirect("core:dashboard")
+    return render(request, "users/verify_email_sent.html")
+
+
+@require_http_methods(["GET"])
+def verify_email_view(request: HttpRequest, token: str) -> HttpResponse:
+    try:
+        user_id = unsign_verification_token(token)
+    except SignatureExpired:
+        messages.error(request, "Verification link expired. Please request a new link.")
+        return redirect("users:login")
+    except (BadSignature, ValueError):
+        messages.error(request, "Invalid verification link.")
+        return redirect("users:login")
+
+    User = get_user_model()
+
+    try:
+        user = User.objects.get(pk=user_id)
+    except User.DoesNotExist:
+        messages.error(request, "Account not found.")
+        return redirect("users:login")
+
+    if user.is_active:
+        messages.info(request, "Email already verified. You can login.")
+        return redirect("users:login")
+
+    user.is_active = True
+    user.save(update_fields=["is_active"])
+    messages.success(request, "Email verified successfully. You can now login.")
+    return redirect("users:login")
