@@ -1,3 +1,3 @@
 from django.contrib import admin
 
-# Model admin registrations intentionally omitted.
+# Register your models here.
