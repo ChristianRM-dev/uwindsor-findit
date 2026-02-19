@@ -19,5 +19,6 @@ python3 manage.py seed_minimal_catalogs
 `seed_minimal_catalogs` is idempotent and creates baseline records for:
 - categories
 - campus locations
+- sample items
 
 > Keep these docs short, practical, and updated. If a doc changes behavior, update the README and any scripts accordingly.
