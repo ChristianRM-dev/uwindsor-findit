@@ -1,9 +1,13 @@
+from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.shortcuts import get_object_or_404, render
-from django.urls import reverse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import NoReverseMatch, reverse
 
+from apps.listings.forms import ReportLostItemForm
 from apps.listings.models import CampusLocation, Category, Item
+from apps.listings.models import ItemImage
 
 
 def search_results_view(request):
@@ -77,7 +81,12 @@ def item_detail_view(request, pk: int):
     )
 
     is_guest = not request.user.is_authenticated
-    claim_url = reverse("listings:claim_create", kwargs={"item_id": item.id}) if request.user.is_authenticated else None
+    claim_url = None
+    if request.user.is_authenticated:
+        try:
+            claim_url = reverse("listings:claim_create", kwargs={"item_id": item.id})
+        except NoReverseMatch:
+            claim_url = None
     login_url = reverse("users:login")
     register_url = reverse("users:register")
 
@@ -91,3 +100,36 @@ def item_detail_view(request, pk: int):
         "search_url": reverse("listings:search_results"),
     }
     return render(request, "listings/item_detail.html", context)
+
+
+@login_required
+def report_lost_item_view(request):
+    form = ReportLostItemForm(request.POST or None, request.FILES or None)
+
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            item = form.save(commit=False)
+            item.reporter = request.user
+            item.item_type = Item.ItemType.LOST
+            item.status = Item.Status.LOST
+            item.save()
+
+            for photo in request.FILES.getlist("photos")[: ReportLostItemForm.max_files]:
+                ItemImage.objects.create(
+                    item=item,
+                    image=photo,
+                    uploaded_by=request.user,
+                )
+
+        return redirect(reverse("listings:item_detail_public", kwargs={"pk": item.pk}))
+
+    context = {
+        "form": form,
+        "cancel_url": reverse("core:dashboard"),
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "Report Lost Item", "url": None, "active": True},
+        ],
+    }
+    return render(request, "listings/report_lost_item.html", context)

@@ -9,7 +9,7 @@
 <h1 class="mb-3">Search Results</h1>
 
   <form method="get" action="{% url 'listings:search_results' %}" class="row g-2 mb-3">
-<div class="col-md-4">
+<div class="col-md-3">
 <input type="text" name="q" value="{{ filters.q }}" class="form-control" placeholder="Search items...">
 </div>
 
@@ -45,8 +45,11 @@
 </select>
 </div>
 
-    <div class="col-md-2">
-<button class="btn btn-primary w-100" type="submit">Apply</button>
+    <div class="col-md-3">
+      <div class="d-flex gap-2">
+        <button class="btn btn-primary flex-fill" type="submit">Apply</button>
+        <a class="btn btn-outline-secondary flex-fill" href="{% url 'listings:report_lost_item' %}">Report Lost Item</a>
+      </div>
 </div>
 </form>
 
@@ -111,4 +114,3 @@
 </div>
 
 {% endblock %}
-

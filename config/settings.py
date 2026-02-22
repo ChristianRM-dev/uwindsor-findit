@@ -43,6 +43,8 @@ DJANGO_APPS = [
 ]
 
 THIRD_PARTY_APPS = [
+    "crispy_forms",
+    "crispy_bootstrap5",
 ]
 
 LOCAL_APPS = [
@@ -142,6 +144,9 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "storage"
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
@@ -163,4 +168,5 @@ REQUIRE_EMAIL_VERIFICATION = False
 # Token expiration (seconds)
 EMAIL_VERIFICATION_TOKEN_MAX_AGE = 60 * 60 * 24  # 24h
 
-
+CRISPY_ALLOWED_TEMPLATE_PACKS = ("bootstrap5",)
+CRISPY_TEMPLATE_PACK = "bootstrap5"
