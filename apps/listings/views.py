@@ -3,7 +3,7 @@ from django.db import transaction
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 
 from apps.listings.forms import ReportLostItemForm
 from apps.listings.models import CampusLocation, Category, Item
@@ -81,7 +81,12 @@ def item_detail_view(request, pk: int):
     )
 
     is_guest = not request.user.is_authenticated
-    claim_url = reverse("listings:claim_create", kwargs={"item_id": item.id}) if request.user.is_authenticated else None
+    claim_url = None
+    if request.user.is_authenticated:
+        try:
+            claim_url = reverse("listings:claim_create", kwargs={"item_id": item.id})
+        except NoReverseMatch:
+            claim_url = None
     login_url = reverse("users:login")
     register_url = reverse("users:register")
 
@@ -121,5 +126,10 @@ def report_lost_item_view(request):
     context = {
         "form": form,
         "cancel_url": reverse("core:dashboard"),
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "Report Lost Item", "url": None, "active": True},
+        ],
     }
     return render(request, "listings/report_lost_item.html", context)

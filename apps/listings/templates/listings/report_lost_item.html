@@ -1,18 +1,13 @@
 {% extends "layouts/private_base.html" %}
 {% load static %}
+{% load crispy_forms_tags %}
 
 {% block title %}Report Lost Item{% endblock %}
 
 {% block content %}
 <div class="row justify-content-center">
   <div class="col-12 col-lg-9">
-    <nav aria-label="breadcrumb" class="mb-3">
-      <ol class="breadcrumb mb-0">
-        <li class="breadcrumb-item"><a href="{% url 'core:home' %}">Home</a></li>
-        <li class="breadcrumb-item"><a href="{% url 'core:dashboard' %}">Dashboard</a></li>
-        <li class="breadcrumb-item active" aria-current="page">Report Lost Item</li>
-      </ol>
-    </nav>
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
 
     <h1 class="h2 mb-2">Report a Lost Item</h1>
     <p class="text-muted mb-4">Provide as many details as possible to help others identify your item.</p>
@@ -23,16 +18,14 @@
           {% csrf_token %}
 
           <div class="mb-3">
-            <label for="{{ form.title.id_for_label }}" class="form-label fw-semibold">What did you lose? *</label>
-            {{ form.title }}
+            {{ form.title|as_crispy_field }}
             {% if form.title.errors %}
               <div class="invalid-feedback d-block">{{ form.title.errors|join:", " }}</div>
             {% endif %}
           </div>
 
           <div class="mb-3">
-            <label for="{{ form.category.id_for_label }}" class="form-label fw-semibold">Category *</label>
-            {{ form.category }}
+            {{ form.category|as_crispy_field }}
             {% if form.category.errors %}
               <div class="invalid-feedback d-block">{{ form.category.errors|join:", " }}</div>
             {% endif %}
@@ -42,8 +35,7 @@
           </div>
 
           <div class="mb-3">
-            <label for="{{ form.event_date.id_for_label }}" class="form-label fw-semibold">When did you lose it? *</label>
-            {{ form.event_date }}
+            {{ form.event_date|as_crispy_field }}
             <div class="form-text">Approximate date is fine.</div>
             {% if form.event_date.errors %}
               <div class="invalid-feedback d-block">{{ form.event_date.errors|join:", " }}</div>
@@ -51,8 +43,7 @@
           </div>
 
           <div class="mb-3">
-            <label for="{{ form.location.id_for_label }}" class="form-label fw-semibold">Where did you lose it? *</label>
-            {{ form.location }}
+            {{ form.location|as_crispy_field }}
             {% if form.location.errors %}
               <div class="invalid-feedback d-block">{{ form.location.errors|join:", " }}</div>
             {% endif %}
@@ -62,8 +53,7 @@
           </div>
 
           <div class="mb-3">
-            <label for="{{ form.description.id_for_label }}" class="form-label fw-semibold">Detailed Description *</label>
-            {{ form.description }}
+            {{ form.description|as_crispy_field }}
             <div class="form-text">The more detail you provide, the easier it is to identify.</div>
             {% if form.description.errors %}
               <div class="invalid-feedback d-block">{{ form.description.errors|join:", " }}</div>
@@ -71,8 +61,7 @@
           </div>
 
           <div class="mb-4">
-            <label for="{{ form.photos.id_for_label }}" class="form-label fw-semibold">Upload Photos <span class="text-muted fw-normal">(Optional)</span></label>
-            {{ form.photos }}
+            {{ form.photos|as_crispy_field }}
             <div class="form-text">Upload up to 5 photos (JPG/PNG, max 5MB each).</div>
             {% if form.photos.errors %}
               <div class="invalid-feedback d-block">{{ form.photos.errors|join:", " }}</div>

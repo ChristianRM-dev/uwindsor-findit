@@ -73,6 +73,12 @@ class ReportLostItemForm(forms.ModelForm):
         self.fields["category"].queryset = Category.objects.filter(is_active=True)
         self.fields["location"].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields["event_date"].input_formats = ["%Y-%m-%dT%H:%M"]
+        self.fields["title"].label = "What did you lose?"
+        self.fields["category"].label = "Category"
+        self.fields["event_date"].label = "When did you lose it?"
+        self.fields["location"].label = "Where did you lose it?"
+        self.fields["description"].label = "Detailed Description"
+        self.fields["photos"].label = "Upload Photos (Optional)"
 
     def clean_event_date(self):
         event_date = self.cleaned_data.get("event_date")
