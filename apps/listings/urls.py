@@ -8,4 +8,9 @@ urlpatterns = [
     path("search", views.search_results_view, name="search_results"),
     path("items/<int:pk>", views.item_detail_view, name="item_detail_public"),
     path("items/lost/new", views.report_lost_item_view, name="report_lost_item"),
+    path("claims/new/<int:item_id>/", views.claim_create_view, name="claim_create"),
+    path("claims/<int:claim_id>", views.claim_detail_view, name="claim_detail"),
+    path("my/claims", views.my_claims_view, name="my_claims"),
+    path("my/received-claims", views.my_received_claims_view, name="my_received_claims"),
+    path("my/items", views.my_items_view, name="my_items"),
 ]

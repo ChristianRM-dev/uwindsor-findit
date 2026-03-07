@@ -1,0 +1,30 @@
+{% extends "layouts/private_base.html" %}
+
+{% block title %}{{ item.title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-9">
+    <div class="card">
+      <div class="card-body">
+        <h1 class="h3 mb-2">{{ item.title }}</h1>
+        <p class="text-muted mb-3">{{ item.category.name }} - {{ item.location.name }}</p>
+        <p class="mb-4">{{ item.description }}</p>
+
+        <div class="d-flex gap-2 flex-wrap">
+          {% if claim_url %}
+            <a href="{{ claim_url }}" class="btn btn-primary">Claim this item</a>
+          {% endif %}
+          <a href="{{ search_url }}" class="btn btn-outline-secondary">Back to search</a>
+        </div>
+
+        {% if is_guest %}
+          <div class="alert alert-light border mt-4 mb-0">
+            Please <a href="{{ login_url }}">log in</a> or <a href="{{ register_url }}">register</a> to submit a claim.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

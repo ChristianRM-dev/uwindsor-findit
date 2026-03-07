@@ -1,0 +1,327 @@
+{% extends "layouts/private_base.html" %}
+
+{% block title %}Claim Item{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+      <div>
+        <h1 class="h3 mb-1">Claim Item</h1>
+        <p class="text-muted mb-0">Provide details and proof so the owner/admin can verify your claim.</p>
+      </div>
+      <a class="small link-secondary" href="{{ item_details_url }}">&larr; Back to item</a>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-5">
+        <div class="card h-100">
+          <div class="card-header bg-white">
+            <h2 class="h5 mb-0">Item summary</h2>
+          </div>
+          <div class="card-body">
+            {% if show_summary_loading %}
+              <div class="placeholder-glow mb-3">
+                <span class="placeholder col-12" style="height: 180px;"></span>
+              </div>
+              <p class="placeholder-glow mb-2">
+                <span class="placeholder col-7"></span>
+              </p>
+              <div class="placeholder-glow mb-3">
+                <span class="placeholder col-4"></span>
+                <span class="placeholder col-3"></span>
+              </div>
+              <p class="placeholder-glow mb-1"><span class="placeholder col-8"></span></p>
+              <p class="placeholder-glow mb-1"><span class="placeholder col-9"></span></p>
+              <p class="placeholder-glow mb-3"><span class="placeholder col-7"></span></p>
+            {% else %}
+              {% if item_images %}
+                <div class="row g-2 mb-3">
+                  {% for image in item_images %}
+                    <div class="{% if forloop.first %}col-12{% else %}col-4{% endif %}">
+                      <div class="ratio {% if forloop.first %}ratio-4x3{% else %}ratio-1x1{% endif %} bg-light border rounded">
+                        <img src="{{ image.image.url }}" alt="{{ item.title }}" class="w-100 h-100 object-fit-cover rounded">
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% else %}
+                <div class="ratio ratio-4x3 bg-light border rounded mb-3">
+                  <div class="d-flex align-items-center justify-content-center text-muted small">[image placeholder]</div>
+                </div>
+              {% endif %}
+
+              <p class="fw-semibold mb-2">{{ item.title|default:"Black Wallet" }}</p>
+
+              <div class="d-flex flex-wrap gap-2 mb-3">
+                <span class="badge {{ status_badge_class }}">{{ item.get_status_display }}</span>
+                <span class="badge text-bg-secondary">{{ item.category.name|default:"Documents" }}</span>
+              </div>
+
+              <dl class="row small mb-2">
+                <dt class="col-5 text-muted fw-normal">Category:</dt>
+                <dd class="col-7 mb-1">{{ item.category.name|default:"Documents" }}</dd>
+                <dt class="col-5 text-muted fw-normal">Location:</dt>
+                <dd class="col-7 mb-1">{{ item.location.name|default:"Library" }}</dd>
+                <dt class="col-5 text-muted fw-normal">Date posted:</dt>
+                <dd class="col-7 mb-1">{{ item.created_at|date:"M d, Y"|default:"Feb 28, 2026" }}</dd>
+                <dt class="col-5 text-muted fw-normal">Reference ID:</dt>
+                <dd class="col-7 mb-0">#ITEM-{{ item.id|stringformat:"04d"|default:"1023" }}</dd>
+              </dl>
+
+              <hr class="my-3">
+
+              <p class="small text-muted mb-3">Make sure your claim details match the item description.</p>
+
+              <a class="btn btn-outline-secondary btn-sm" href="{{ item_details_url }}">View item details</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header bg-white">
+            <h2 class="h5 mb-0">Claim form</h2>
+          </div>
+          <div class="card-body">
+            {% if form.errors %}
+              <div class="alert alert-danger" role="alert">Please fix the highlighted fields before submitting.</div>
+            {% endif %}
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger" role="alert">{{ form.non_field_errors|join:", " }}</div>
+            {% endif %}
+            {% if claim_restriction_message and not form.non_field_errors %}
+              <div class="alert alert-warning" role="alert">{{ claim_restriction_message }}</div>
+            {% endif %}
+
+            <div class="alert alert-light border" role="alert">
+              To verify ownership, include a clear description and upload at least one proof document or photo.
+            </div>
+
+            <form method="post" enctype="multipart/form-data" novalidate>
+              {% csrf_token %}
+
+              <div class="mb-3">
+                <label for="id_full_name" class="form-label">Full name</label>
+                <input
+                  type="text"
+                  id="id_full_name"
+                  name="full_name"
+                  class="form-control{% if form.full_name.errors %} is-invalid{% endif %}"
+                  value="{{ form.full_name.value|default_if_none:'' }}"
+                  required
+                >
+                {% if form.full_name.errors %}
+                  <div class="invalid-feedback d-block">{{ form.full_name.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_email" class="form-label">Email</label>
+                <input
+                  type="text"
+                  id="id_email"
+                  name="email"
+                  class="form-control{% if form.email.errors %} is-invalid{% endif %}"
+                  value="{{ form.email.value|default_if_none:'' }}"
+                  required
+                >
+                {% if form.email.errors %}
+                  <div class="invalid-feedback d-block">{{ form.email.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_relationship_to_item" class="form-label">Relationship to item</label>
+                <select
+                  id="id_relationship_to_item"
+                  name="relationship_to_item"
+                  class="form-select{% if form.relationship_to_item.errors %} is-invalid{% endif %}"
+                  required
+                >
+                  {% for value, label in form.fields.relationship_to_item.choices %}
+                    <option value="{{ value }}" {% if form.relationship_to_item.value == value %}selected{% endif %}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+                {% if form.relationship_to_item.errors %}
+                  <div class="invalid-feedback d-block">{{ form.relationship_to_item.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_detailed_description" class="form-label">Detailed description</label>
+                <textarea
+                  id="id_detailed_description"
+                  name="detailed_description"
+                  class="form-control{% if form.detailed_description.errors %} is-invalid{% endif %}"
+                  rows="5"
+                  placeholder="Describe unique identifiers (marks, contents, serial number, case color, etc.)."
+                  required
+                >{{ form.detailed_description.value|default_if_none:'' }}</textarea>
+                {% if form.detailed_description.errors %}
+                  <div class="invalid-feedback d-block">{{ form.detailed_description.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_where_lost_location" class="form-label">Where did you lose it?*</label>
+                <select
+                  id="id_where_lost_location"
+                  name="where_lost_location"
+                  class="form-select{% if form.where_lost_location.errors %} is-invalid{% endif %}"
+                  required
+                >
+                  <option value="">Select location</option>
+                  {% for location in form.fields.where_lost_location.queryset %}
+                    <option
+                      value="{{ location.pk }}"
+                      {% if form.where_lost_location.value|stringformat:"s" == location.pk|stringformat:"s" %}selected{% endif %}
+                    >
+                      {{ location.name }}
+                    </option>
+                  {% endfor %}
+                </select>
+                {% if form.where_lost_location.errors %}
+                  <div class="invalid-feedback d-block">{{ form.where_lost_location.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_proof_files" class="form-label">Proof upload</label>
+                <input
+                  type="file"
+                  id="id_proof_files"
+                  name="proof_files"
+                  class="form-control{% if form.proof_files.errors %} is-invalid{% endif %}"
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                  multiple
+                  required
+                >
+                <div class="form-text">Accepted: JPG/PNG/PDF. Max 10MB each. Upload 1-3 files.</div>
+                <ul id="uploaded-files-list" class="small list-unstyled mt-2 mb-0"></ul>
+                <div
+                  id="proof-upload-warning"
+                  class="alert alert-warning py-2 px-3 mt-2{% if not form.proof_files.errors %} d-none{% endif %}"
+                  role="alert"
+                >
+                  File too large / unsupported format.
+                </div>
+                {% if form.proof_files.errors %}
+                  <div class="invalid-feedback d-block">{{ form.proof_files.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="form-check mb-4">
+                <input
+                  class="form-check-input{% if form.consent.errors %} is-invalid{% endif %}"
+                  type="checkbox"
+                  id="id_consent"
+                  name="consent"
+                  {% if form.consent.value %}checked{% endif %}
+                  required
+                >
+                <label class="form-check-label" for="id_consent">
+                  I confirm the information is accurate and I understand false claims may result in account restrictions.
+                </label>
+                {% if form.consent.errors %}
+                  <div class="invalid-feedback d-block">{{ form.consent.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" {% if claim_restriction_message %}disabled{% endif %}>Submit claim</button>
+                <a href="{{ item_details_url }}" class="btn btn-outline-secondary">Cancel</a>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const fileInput = document.getElementById("id_proof_files");
+    const filesList = document.getElementById("uploaded-files-list");
+    const uploadWarning = document.getElementById("proof-upload-warning");
+
+    if (!fileInput || !filesList || !uploadWarning) {
+      return;
+    }
+
+    const maxFiles = 3;
+    const maxFileSize = 10 * 1024 * 1024;
+    const allowedExtensions = new Set(["jpg", "jpeg", "png", "pdf"]);
+    let selectedFiles = [];
+
+    const syncInputFiles = () => {
+      const transfer = new DataTransfer();
+      selectedFiles.forEach((file) => transfer.items.add(file));
+      fileInput.files = transfer.files;
+    };
+
+    const renderFileList = () => {
+      filesList.innerHTML = "";
+
+      selectedFiles.forEach((file, index) => {
+        const listItem = document.createElement("li");
+        listItem.className = "d-flex justify-content-between align-items-center gap-2 py-1";
+
+        const fileName = document.createElement("span");
+        fileName.className = "text-muted";
+        fileName.textContent = file.name;
+
+        const removeLink = document.createElement("a");
+        removeLink.href = "#";
+        removeLink.className = "small link-danger";
+        removeLink.textContent = "Remove";
+        removeLink.addEventListener("click", (event) => {
+          event.preventDefault();
+          selectedFiles.splice(index, 1);
+          syncInputFiles();
+          renderFileList();
+        });
+
+        listItem.append(fileName, removeLink);
+        filesList.appendChild(listItem);
+      });
+    };
+
+    const toggleWarning = (shouldShow) => {
+      if (shouldShow) {
+        uploadWarning.classList.remove("d-none");
+      } else {
+        uploadWarning.classList.add("d-none");
+      }
+    };
+
+    fileInput.addEventListener("change", () => {
+      let hasUploadError = false;
+      const incomingFiles = Array.from(fileInput.files);
+
+      incomingFiles.forEach((file) => {
+        const extension = file.name.includes(".") ? file.name.split(".").pop().toLowerCase() : "";
+        const isValidType = allowedExtensions.has(extension);
+        const isValidSize = file.size <= maxFileSize;
+
+        if (!isValidType || !isValidSize || selectedFiles.length >= maxFiles) {
+          hasUploadError = true;
+          return;
+        }
+
+        selectedFiles.push(file);
+      });
+
+      syncInputFiles();
+      renderFileList();
+      toggleWarning(hasUploadError);
+    });
+  });
+</script>
+{% endblock %}

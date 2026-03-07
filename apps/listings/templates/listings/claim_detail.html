@@ -1,0 +1,139 @@
+{% extends "layouts/private_base.html" %}
+
+{% block title %}Claim #{{ claim.id }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+      <div>
+        <h1 class="h3 mb-1">Claim #CLM-{{ claim.id|stringformat:"04d" }}</h1>
+        <p class="text-muted mb-0">Submitted on {{ claim.created_at|date:"M d, Y" }}.</p>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ item_details_url }}">View item</a>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-lg-5">
+        <div class="card">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Item</h2>
+          </div>
+          <div class="card-body">
+            <p class="fw-semibold mb-1">{{ claim.item.title }}</p>
+            <p class="small text-muted mb-2">#ITEM-{{ claim.item.id|stringformat:"04d" }}</p>
+            <p class="small mb-0">Reported by: {{ claim.item.reporter.get_username }}</p>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Claim status</h2>
+          </div>
+          <div class="card-body">
+            {% if claim.status == "PENDING" %}
+              <span class="badge bg-warning text-dark">Pending</span>
+            {% elif claim.status == "APPROVED" %}
+              <span class="badge bg-success">Approved</span>
+            {% elif claim.status == "REJECTED" %}
+              <span class="badge bg-danger">Rejected</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ claim.get_status_display }}</span>
+            {% endif %}
+            <p class="small text-muted mt-2 mb-0">Last updated: {{ claim.updated_at|date:"M d, Y" }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-lg-7">
+        <div class="card">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Claim details</h2>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-sm-6">
+                <div class="small text-muted">Claimant account</div>
+                <div class="fw-semibold">{{ claim.claimant.get_username }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="small text-muted">Contact email</div>
+                <div class="fw-semibold">{{ parsed_claim.email|default:claim.claimant.email }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="small text-muted">Full name</div>
+                <div class="fw-semibold">{{ parsed_claim.full_name|default:"Not provided" }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="small text-muted">Relationship to item</div>
+                <div class="fw-semibold">{{ parsed_claim.relationship_to_item|default:"Not provided" }}</div>
+              </div>
+              <div class="col-12">
+                <div class="small text-muted">Where lost</div>
+                <div class="fw-semibold">{{ parsed_claim.where_lost|default:"Not provided" }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Detailed description</h2>
+          </div>
+          <div class="card-body">
+            <p class="small bg-light border rounded p-3 mb-0" style="white-space: pre-line;">{{ parsed_claim.claim_details }}</p>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Proof files ({{ proofs|length }})</h2>
+          </div>
+          <div class="card-body">
+            {% if proofs %}
+              {% if image_proofs %}
+                <h3 class="h6 mb-2">Image evidence</h3>
+                <div class="row g-3">
+                  {% for entry in image_proofs %}
+                    <div class="col-12 col-md-6">
+                      <div class="card h-100">
+                        <div class="ratio ratio-4x3 bg-light border-bottom">
+                          <img
+                            src="{{ entry.proof.file.url }}"
+                            alt="{{ entry.filename }}"
+                            class="w-100 h-100 object-fit-cover rounded-top"
+                          >
+                        </div>
+                        <div class="card-body p-2">
+                          <p class="small text-truncate mb-1">{{ entry.filename }}</p>
+                          <a class="small" href="{{ entry.proof.file.url }}" target="_blank" rel="noopener">Open file</a>
+                        </div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+
+              {% if non_image_proofs %}
+                <h3 class="h6 mb-2 {% if image_proofs %}mt-3{% endif %}">Other files</h3>
+                <ul class="list-group list-group-flush">
+                  {% for entry in non_image_proofs %}
+                    <li class="list-group-item px-0 d-flex justify-content-between align-items-center gap-2">
+                      <span class="small text-break">{{ entry.filename }}</span>
+                      <a class="small" href="{{ entry.proof.file.url }}" target="_blank" rel="noopener">Open</a>
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% endif %}
+            {% else %}
+              <p class="text-muted mb-0">No proof files uploaded.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

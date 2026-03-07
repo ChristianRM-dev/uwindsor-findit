@@ -3,7 +3,7 @@
 {% block body_class %}bg-light{% endblock %}
 
 {% block body %}
-  {% include "partials/navbar.html" %}
+  {% include "partials/navbar.html" with navbar_mode="public" %}
 
   <main class="container py-4">
     {% include "partials/messages.html" %}
