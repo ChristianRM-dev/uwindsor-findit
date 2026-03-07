@@ -1,0 +1,110 @@
+{% extends "layouts/private_base.html" %}
+
+{% block title %}My Items{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+      <div>
+        <h1 class="h3 mb-1">My Items</h1>
+        <p class="text-muted mb-0">Track your reported items and pending claims.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-primary btn-sm" href="{% url 'listings:report_lost_item' %}">Create New</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ received_claims_url }}">Claims Received</a>
+      </div>
+    </div>
+
+    {% if items %}
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col">Item</th>
+                <th scope="col">Category</th>
+                <th scope="col">Status</th>
+                <th scope="col">Date reported</th>
+                <th scope="col">Claims</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+                <tr>
+                  <td>
+                    <div>{{ item.title }}</div>
+                    <div class="small text-muted">#ITEM-{{ item.id|stringformat:"04d" }}</div>
+                  </td>
+                  <td>{{ item.category.name }}</td>
+                  <td>
+                    {% if item.status == "LOST" %}
+                      <span class="badge bg-warning text-dark">Lost</span>
+                    {% elif item.status == "FOUND" %}
+                      <span class="badge bg-success">Found</span>
+                    {% elif item.status == "CLAIMED" %}
+                      <span class="badge bg-primary">Claimed</span>
+                    {% elif item.status == "RETURNED" %}
+                      <span class="badge bg-secondary">Returned</span>
+                    {% else %}
+                      <span class="badge bg-light text-dark border">{{ item.get_status_display }}</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ item.created_at|date:"M d, Y" }}</td>
+                  <td>
+                    {% if item.pending_claims_count > 0 %}
+                      <span class="badge bg-warning text-dark">Pending claims: {{ item.pending_claims_count }}</span>
+                    {% else %}
+                      <span class="text-muted small">No pending claims</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <a class="btn btn-primary btn-sm" href="{% url 'listings:item_detail_public' pk=item.id %}">View item</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {% if page_obj.paginator.num_pages > 1 %}
+        <nav aria-label="My items pagination" class="mt-3">
+          <ul class="pagination pagination-sm justify-content-end mb-0">
+            <li class="page-item {% if not page_obj.has_previous %}disabled{% endif %}">
+              {% if page_obj.has_previous %}
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+              {% else %}
+                <span class="page-link">Previous</span>
+              {% endif %}
+            </li>
+            {% for page_number in page_obj.paginator.page_range %}
+              <li class="page-item {% if page_obj.number == page_number %}active{% endif %}">
+                <a class="page-link" href="?page={{ page_number }}">{{ page_number }}</a>
+              </li>
+            {% endfor %}
+            <li class="page-item {% if not page_obj.has_next %}disabled{% endif %}">
+              {% if page_obj.has_next %}
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+              {% else %}
+                <span class="page-link">Next</span>
+              {% endif %}
+            </li>
+          </ul>
+        </nav>
+      {% endif %}
+    {% else %}
+      <div class="card text-center">
+        <div class="card-body py-5">
+          <h2 class="h5 mb-2">No items reported yet</h2>
+          <p class="text-muted mb-3">Start by creating your first lost item report.</p>
+          <a class="btn btn-primary" href="{% url 'listings:report_lost_item' %}">Report Lost Item</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

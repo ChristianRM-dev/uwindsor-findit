@@ -36,7 +36,6 @@
 
           <div class="mb-3">
             {{ form.event_date|as_crispy_field }}
-            <div class="form-text">Approximate date is fine.</div>
             {% if form.event_date.errors %}
               <div class="invalid-feedback d-block">{{ form.event_date.errors|join:", " }}</div>
             {% endif %}

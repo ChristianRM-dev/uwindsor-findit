@@ -3,12 +3,23 @@
 {% block body_class %}bg-light{% endblock %}
 
 {% block body %}
-  {% include "partials/navbar.html" %}
+  {% include "partials/navbar.html" with navbar_mode="private" %}
 
-  <main class="container py-4">
-    {% include "partials/messages.html" %}
+  <main class="container-fluid px-0">
+    <div class="row g-0">
+      <aside class="col-12 col-lg-3 col-xl-2 bg-white border-end">
+        <div class="p-3 p-lg-4">
+          {% include "partials/private_sidenav.html" %}
+        </div>
+      </aside>
 
-    {% block content %}{% endblock %}
+      <section class="col-12 col-lg-9 col-xl-10">
+        <div class="p-3 p-md-4">
+          {% include "partials/messages.html" %}
+          {% block content %}{% endblock %}
+        </div>
+      </section>
+    </div>
   </main>
 
   {% include "partials/footer.html" %}

@@ -13,7 +13,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.listings.models import CampusLocation, Category, Item, ItemImage
+from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
 
 
 class ReportLostItemViewTests(TestCase):
@@ -180,3 +180,594 @@ class ReportLostItemViewTests(TestCase):
         self.assertNotIn("Inactive category", category_names)
         self.assertIn("Leddy Library", location_names)
         self.assertNotIn("Inactive location", location_names)
+
+    def test_event_date_has_max_attr_and_single_help_text(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Approximate date is fine.", count=1)
+        self.assertNotContains(response, "Date when the item was lost/found.")
+
+        form = response.context["form"]
+        event_date_max = form.fields["event_date"].widget.attrs.get("max")
+        self.assertIsNotNone(event_date_max)
+        self.assertRegex(event_date_max, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
+
+
+class ClaimCreateViewTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="findit-claim-test-media-")
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(lambda: shutil.rmtree(self.media_root, ignore_errors=True))
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="claimant@uwindsor.ca",
+            email="claimant@uwindsor.ca",
+            password="StrongPass123!",
+            first_name="Avery",
+            last_name="Jones",
+        )
+        self.reporter = User.objects.create_user(
+            username="reporter@uwindsor.ca",
+            email="reporter@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Documents", slug="documents", is_active=True)
+        self.location = CampusLocation.objects.create(name="Library", code="library", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Black Wallet",
+            description="Found in study lounge.",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+
+        self.url = reverse("listings:claim_create", kwargs={"item_id": self.item.pk})
+        self.my_claims_url = reverse("listings:my_claims")
+
+    def _valid_image_file(self, name: str = "proof.png") -> SimpleUploadedFile:
+        image = Image.new("RGB", (50, 50), color=(120, 120, 120))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
+
+    def _valid_pdf_file(self, name: str = "receipt.pdf") -> SimpleUploadedFile:
+        content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF"
+        return SimpleUploadedFile(name, content, content_type="application/pdf")
+
+    def test_redirects_guest_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_authenticated_get_renders_claim_screen(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Claim Item")
+        self.assertContains(response, "FindIt")
+        self.assertContains(response, "Item summary")
+        self.assertContains(response, "Claim form")
+        self.assertContains(response, 'name="full_name"')
+        self.assertContains(response, 'name="email"')
+        self.assertContains(response, 'name="relationship_to_item"')
+        self.assertContains(response, 'name="detailed_description"')
+        self.assertContains(response, 'name="where_lost_location"')
+        self.assertContains(response, 'name="proof_files"')
+        self.assertContains(response, "Library")
+        self.assertContains(response, 'aria-label="Private navigation"')
+        self.assertContains(response, "Claims Received")
+        self.assertNotContains(response, "Search lost & found items...")
+        self.assertNotContains(response, "Claims Recibidos")
+
+    def test_loading_state_renders_item_summary_skeleton(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(f"{self.url}?loading=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "placeholder-glow")
+
+    def test_valid_post_creates_claim_and_proofs(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "full_name": "Avery Jones",
+            "email": "claimant@uwindsor.ca",
+            "relationship_to_item": "Owner",
+            "detailed_description": "Wallet has a blue stripe and two student cards.",
+            "where_lost_location": str(self.location.pk),
+            "consent": "on",
+            "proof_files": [self._valid_image_file(), self._valid_pdf_file()],
+        }
+
+        response = self.client.post(self.url, data=payload, format="multipart")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, self.my_claims_url)
+
+        self.assertEqual(Claim.objects.count(), 1)
+        created_claim = Claim.objects.get()
+        self.assertEqual(created_claim.item, self.item)
+        self.assertEqual(created_claim.claimant, self.user)
+        self.assertIn("Relationship to item: Owner", created_claim.description)
+        self.assertIn("Where lost: Library", created_claim.description)
+        self.assertEqual(ClaimProof.objects.filter(claim=created_claim).count(), 2)
+
+    def test_invalid_post_shows_top_alert_and_field_errors(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.post(self.url, data={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Please fix the highlighted fields before submitting.")
+        self.assertContains(response, "This field is required.")
+        self.assertEqual(Claim.objects.count(), 0)
+
+    def test_rejects_unsupported_file_format(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        bad_file = SimpleUploadedFile("notes.txt", b"plain-text", content_type="text/plain")
+
+        payload = {
+            "full_name": "Avery Jones",
+            "email": "claimant@uwindsor.ca",
+            "relationship_to_item": "Owner",
+            "detailed_description": "Details",
+            "where_lost_location": str(self.location.pk),
+            "consent": "on",
+            "proof_files": bad_file,
+        }
+
+        response = self.client.post(self.url, data=payload, format="multipart")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "File too large / unsupported format.")
+        self.assertEqual(Claim.objects.count(), 0)
+
+    def test_rejects_more_than_three_files(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "full_name": "Avery Jones",
+            "email": "claimant@uwindsor.ca",
+            "relationship_to_item": "Owner",
+            "detailed_description": "Details",
+            "where_lost_location": str(self.location.pk),
+            "consent": "on",
+            "proof_files": [
+                self._valid_image_file("a.png"),
+                self._valid_image_file("b.png"),
+                self._valid_image_file("c.png"),
+                self._valid_pdf_file("d.pdf"),
+            ],
+        }
+
+        response = self.client.post(self.url, data=payload, format="multipart")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Upload 1-3 files.")
+        self.assertEqual(Claim.objects.count(), 0)
+
+    def test_rejects_claim_when_item_is_not_lost(self):
+        self.item.status = Item.Status.CLAIMED
+        self.item.save(update_fields=["status"])
+
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        payload = {
+            "full_name": "Avery Jones",
+            "email": "claimant@uwindsor.ca",
+            "relationship_to_item": "Owner",
+            "detailed_description": "Wallet has a blue stripe and two student cards.",
+            "where_lost_location": str(self.location.pk),
+            "consent": "on",
+            "proof_files": [self._valid_image_file()],
+        }
+
+        response = self.client.post(self.url, data=payload, format="multipart")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Only items with Lost status can be claimed.")
+        self.assertEqual(Claim.objects.count(), 0)
+
+    def test_rejects_claim_for_own_reported_item(self):
+        self.item.reporter = self.user
+        self.item.save(update_fields=["reporter"])
+
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        payload = {
+            "full_name": "Avery Jones",
+            "email": "claimant@uwindsor.ca",
+            "relationship_to_item": "Owner",
+            "detailed_description": "Wallet has a blue stripe and two student cards.",
+            "where_lost_location": str(self.location.pk),
+            "consent": "on",
+            "proof_files": [self._valid_image_file()],
+        }
+
+        response = self.client.post(self.url, data=payload, format="multipart")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You cannot claim your own reported item.")
+        self.assertEqual(Claim.objects.count(), 0)
+
+
+class MyClaimsViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="myclaims@uwindsor.ca",
+            email="myclaims@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.reporter = User.objects.create_user(
+            username="reporter2@uwindsor.ca",
+            email="reporter2@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Electronics", slug="electronics", is_active=True)
+        self.location = CampusLocation.objects.create(name="Leddy Library", code="leddy-library", is_active=True)
+        self.url = reverse("listings:my_claims")
+
+    def _make_item(self, title: str) -> Item:
+        return Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
+            title=title,
+            description=f"{title} description",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=2),
+            is_visible=True,
+        )
+
+    def test_redirects_guest_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_renders_full_my_claims_layout(self):
+        item_1 = self._make_item("Wallet")
+        item_2 = self._make_item("Jacket")
+        item_3 = self._make_item("Keys")
+
+        Claim.objects.create(item=item_1, claimant=self.user, description="Pending claim")
+        Claim.objects.create(
+            item=item_2,
+            claimant=self.user,
+            description="Approved claim",
+            status=Claim.Status.APPROVED,
+        )
+        Claim.objects.create(item=item_3, claimant=self.user, description="Pending claim 2")
+
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "FindIt")
+        self.assertContains(response, "My Claims")
+        self.assertContains(response, "Track the status of your claims.")
+        self.assertContains(response, "Refresh")
+        self.assertContains(response, "Pending")
+        self.assertContains(response, "Approved")
+        self.assertContains(response, "Rejected")
+        self.assertContains(response, "Claims")
+        self.assertContains(response, "Search claims...")
+        self.assertContains(response, "All statuses")
+        self.assertContains(response, "Newest first")
+        self.assertContains(response, "View item")
+        self.assertContains(response, "Claim details")
+        self.assertContains(response, 'aria-label="Private navigation"')
+        self.assertNotContains(response, "Report Lost Item")
+        self.assertNotContains(response, "Search lost & found items...")
+        self.assertNotContains(response, "Claims Recibidos")
+
+    def test_empty_state_renders_expected_content(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No claims yet")
+        self.assertContains(response, "When you submit a claim, it will appear here.")
+        self.assertContains(response, "Browse items")
+
+    def test_loading_and_error_states_render(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        loading_response = self.client.get(f"{self.url}?state=loading")
+        self.assertEqual(loading_response.status_code, 200)
+        self.assertContains(loading_response, "placeholder")
+
+        error_response = self.client.get(f"{self.url}?state=error")
+        self.assertEqual(error_response.status_code, 200)
+        self.assertContains(error_response, "Unable to load your claims. Please try again.")
+        self.assertContains(error_response, "Retry")
+
+
+class MyReceivedClaimsViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.reporter = User.objects.create_user(
+            username="owner@uwindsor.ca",
+            email="owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="other@uwindsor.ca",
+            email="other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant_1 = User.objects.create_user(
+            username="claimant1@uwindsor.ca",
+            email="claimant1@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant_2 = User.objects.create_user(
+            username="claimant2@uwindsor.ca",
+            email="claimant2@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Documents", slug="documents-2", is_active=True)
+        self.location = CampusLocation.objects.create(name="CAW", code="caw", is_active=True)
+
+        self.my_item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Blue Wallet",
+            description="Own reported item",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=3),
+            is_visible=True,
+        )
+        self.other_item = Item.objects.create(
+            reporter=self.other_user,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Black Jacket",
+            description="Other user's item",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=2),
+            is_visible=True,
+        )
+
+        self.claim_1 = Claim.objects.create(
+            item=self.my_item,
+            claimant=self.claimant_1,
+            description="Claim 1",
+            status=Claim.Status.PENDING,
+        )
+        self.claim_2 = Claim.objects.create(
+            item=self.my_item,
+            claimant=self.claimant_2,
+            description="Claim 2",
+            status=Claim.Status.APPROVED,
+        )
+        Claim.objects.create(
+            item=self.other_item,
+            claimant=self.claimant_1,
+            description="Should not be visible",
+            status=Claim.Status.PENDING,
+        )
+
+        self.url = reverse("listings:my_received_claims")
+
+    def test_redirects_guest_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_reporter_only_sees_claims_for_own_items(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Claims Received")
+        self.assertContains(response, self.my_item.title)
+        self.assertNotContains(response, self.other_item.title)
+        self.assertContains(response, self.claimant_1.email)
+        self.assertContains(response, self.claimant_2.email)
+
+    def test_filters_status_and_search(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.get(self.url, {"status": "APPROVED", "q": "claimant2"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f"#CLM-{self.claim_2.id:04d}")
+        self.assertNotContains(response, f"#CLM-{self.claim_1.id:04d}")
+
+
+class MyItemsViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="items-owner@uwindsor.ca",
+            email="items-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="items-other@uwindsor.ca",
+            email="items-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant = User.objects.create_user(
+            username="items-claimant@uwindsor.ca",
+            email="items-claimant@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Electronics 2", slug="electronics-2", is_active=True)
+        self.location = CampusLocation.objects.create(name="Essex Hall", code="essex-hall", is_active=True)
+
+        self.item_1 = Item.objects.create(
+            reporter=self.user,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Laptop Sleeve",
+            description="Own item with pending claim",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.item_2 = Item.objects.create(
+            reporter=self.user,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
+            title="Umbrella",
+            description="Own item without pending claim",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.other_item = Item.objects.create(
+            reporter=self.other_user,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Other item",
+            description="Not mine",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+
+        Claim.objects.create(
+            item=self.item_1,
+            claimant=self.claimant,
+            description="Pending claim for item 1",
+            status=Claim.Status.PENDING,
+        )
+        Claim.objects.create(
+            item=self.item_1,
+            claimant=self.other_user,
+            description="Approved claim for item 1",
+            status=Claim.Status.APPROVED,
+        )
+
+        self.url = reverse("listings:my_items")
+
+    def test_redirects_guest_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_lists_only_user_items_with_pending_badge(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Items")
+        self.assertContains(response, self.item_1.title)
+        self.assertContains(response, self.item_2.title)
+        self.assertNotContains(response, self.other_item.title)
+        self.assertContains(response, "Pending claims: 1")
+        self.assertContains(response, "Create New")
+        self.assertContains(response, "Claims Received")
+
+
+class ClaimDetailViewTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="findit-claim-detail-test-media-")
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(lambda: shutil.rmtree(self.media_root, ignore_errors=True))
+
+        User = get_user_model()
+        self.reporter = User.objects.create_user(
+            username="claim-detail-reporter@uwindsor.ca",
+            email="claim-detail-reporter@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant = User.objects.create_user(
+            username="claim-detail-claimant@uwindsor.ca",
+            email="claim-detail-claimant@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.third_user = User.objects.create_user(
+            username="claim-detail-third@uwindsor.ca",
+            email="claim-detail-third@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.admin_user = User.objects.create_user(
+            username="claim-detail-admin@uwindsor.ca",
+            email="claim-detail-admin@uwindsor.ca",
+            password="StrongPass123!",
+            is_staff=True,
+        )
+
+        self.category = Category.objects.create(name="Keys", slug="keys", is_active=True)
+        self.location = CampusLocation.objects.create(name="Odette", code="odette", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Car Keys",
+            description="Keychain with red strap",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.claimant,
+            description="Claim details body",
+            status=Claim.Status.PENDING,
+        )
+        image_file = self._valid_image_file("proof-image.png")
+        doc_file = SimpleUploadedFile("proof-document.pdf", b"%PDF-1.4\n%%EOF", content_type="application/pdf")
+        ClaimProof.objects.create(claim=self.claim, file=image_file)
+        ClaimProof.objects.create(claim=self.claim, file=doc_file)
+
+        self.url = reverse("listings:claim_detail", kwargs={"claim_id": self.claim.id})
+
+    def _valid_image_file(self, name: str = "proof.png") -> SimpleUploadedFile:
+        image = Image.new("RGB", (50, 50), color=(120, 120, 120))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
+
+    def test_redirects_guest_to_login(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_claimant_can_view_detail(self):
+        self.client.login(username=self.claimant.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.item.title)
+        self.assertContains(response, "Proof files (2)")
+        self.assertContains(response, "Image evidence")
+        self.assertContains(response, "Other files")
+        self.assertContains(response, "proof-image.png")
+        self.assertContains(response, "proof-document.pdf")
+
+    def test_reporter_can_view_detail(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.claimant.email)
+
+    def test_admin_can_view_detail(self):
+        self.client.login(username=self.admin_user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Claim details")
+
+    def test_unrelated_user_gets_404(self):
+        self.client.login(username=self.third_user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)

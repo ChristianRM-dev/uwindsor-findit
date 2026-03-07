@@ -1,0 +1,33 @@
+{% with current_view=request.resolver_match.view_name|default:"" %}
+  <nav aria-label="Private navigation">
+    <div class="list-group list-group-flush">
+      <a
+        class="list-group-item list-group-item-action border-0 rounded-2 mb-1 {% if current_view == 'core:dashboard' %}active{% endif %}"
+        href="{% url 'core:dashboard' %}"
+      >
+        <i class="bi bi-speedometer2 me-2"></i>Dashboard
+      </a>
+
+      <a
+        class="list-group-item list-group-item-action border-0 rounded-2 mb-1 {% if current_view == 'listings:my_items' %}active{% endif %}"
+        href="{% url 'listings:my_items' %}"
+      >
+        <i class="bi bi-box-seam me-2"></i>My Items
+      </a>
+
+      <a
+        class="list-group-item list-group-item-action border-0 rounded-2 mb-1 {% if current_view == 'listings:my_claims' or current_view == 'listings:claim_create' or current_view == 'listings:claim_detail' %}active{% endif %}"
+        href="{% url 'listings:my_claims' %}"
+      >
+        <i class="bi bi-check2-square me-2"></i>My Claims
+      </a>
+
+      <a
+        class="list-group-item list-group-item-action border-0 rounded-2 {% if current_view == 'listings:my_received_claims' %}active{% endif %}"
+        href="{% url 'listings:my_received_claims' %}"
+      >
+        <i class="bi bi-inbox me-2"></i>Claims Received
+      </a>
+    </div>
+  </nav>
+{% endwith %}
