@@ -1,0 +1,101 @@
+{% extends "layouts/private_base.html" %}
+
+{% block title %}Edit Item{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  {% include "partials/breadcrumbs.html" with items=breadcrumb_items %}
+
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+          <h1 class="h3 mb-3">Edit Item</h1>
+          <p class="text-muted mb-4">
+            Update your lost item details. You can also upload additional photos.
+          </p>
+
+          <form method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger">
+                {{ form.non_field_errors }}
+              </div>
+            {% endif %}
+
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
+              {{ form.title }}
+              {% for error in form.title.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.category.id_for_label }}">{{ form.category.label }}</label>
+                {{ form.category }}
+                {% for error in form.category.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.location.id_for_label }}">{{ form.location.label }}</label>
+                {{ form.location }}
+                {% for error in form.location.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <label class="form-label" for="{{ form.event_date.id_for_label }}">{{ form.event_date.label }}</label>
+              {{ form.event_date }}
+              {% if form.event_date.help_text %}
+                <div class="form-text">{{ form.event_date.help_text }}</div>
+              {% endif %}
+              {% for error in form.event_date.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="mt-3">
+              <label class="form-label" for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
+              {{ form.description }}
+              {% for error in form.description.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            <div class="mt-3">
+              <label class="form-label" for="{{ form.photos.id_for_label }}">{{ form.photos.label }}</label>
+              {{ form.photos }}
+              <div class="form-text">You can upload up to 5 JPG/PNG images.</div>
+              {% for error in form.photos.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+            </div>
+
+            {% if images %}
+              <div class="mt-4">
+                <h2 class="h6 mb-3">Current Photos</h2>
+                <div class="row g-3">
+                  {% for image in images %}
+                    <div class="col-6 col-md-4">
+                      <div class="card">
+                        <img
+                          src="{{ image.image.url }}"
+                          class="card-img-top"
+                          alt="{{ image.alt_text|default:item.title }}"
+                          style="height: 180px; object-fit: cover;"
+                        >
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
+
+            <div class="d-flex gap-2 mt-4">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-save me-1"></i> Save Changes
+              </button>
+              <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,28 +1,97 @@
-{% extends "layouts/private_base.html" %}
+{% extends "layouts/public_base.html" %}
 
 {% block title %}{{ item.title }}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-12 col-lg-9">
-    <div class="card">
-      <div class="card-body">
-        <h1 class="h3 mb-2">{{ item.title }}</h1>
-        <p class="text-muted mb-3">{{ item.category.name }} - {{ item.location.name }}</p>
-        <p class="mb-4">{{ item.description }}</p>
-
-        <div class="d-flex gap-2 flex-wrap">
-          {% if claim_url %}
-            <a href="{{ claim_url }}" class="btn btn-primary">Claim this item</a>
-          {% endif %}
-          <a href="{{ search_url }}" class="btn btn-outline-secondary">Back to search</a>
-        </div>
-
-        {% if is_guest %}
-          <div class="alert alert-light border mt-4 mb-0">
-            Please <a href="{{ login_url }}">log in</a> or <a href="{{ register_url }}">register</a> to submit a claim.
+<div class="container py-4">
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+            <div>
+              <h1 class="h3 mb-1">{{ item.title }}</h1>
+              <p class="text-muted mb-0">
+                {{ item.category.name }} • {{ item.location.name }}
+              </p>
+            </div>
+            <span class="badge text-bg-secondary">{{ item.get_status_display }}</span>
           </div>
-        {% endif %}
+
+          {% if images %}
+            <div class="row g-3 mb-4">
+              {% for image in images %}
+                <div class="col-6">
+                  <img
+                    src="{{ image.image.url }}"
+                    alt="{{ image.alt_text|default:item.title }}"
+                    class="img-fluid rounded border"
+                    style="height: 220px; width: 100%; object-fit: cover;"
+                  >
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <dl class="row mb-0">
+            <dt class="col-sm-4">Category</dt>
+            <dd class="col-sm-8">{{ item.category.name }}</dd>
+
+            <dt class="col-sm-4">Location</dt>
+            <dd class="col-sm-8">{{ item.location.name }}</dd>
+
+            <dt class="col-sm-4">Date</dt>
+            <dd class="col-sm-8">{{ item.event_date|date:"M d, Y H:i" }}</dd>
+
+            <dt class="col-sm-4">Description</dt>
+            <dd class="col-sm-8">{{ item.description }}</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card shadow-sm border-0">
+        <div class="card-body">
+          <h2 class="h5 mb-3">Actions</h2>
+
+          {% if is_owner %}
+            <div class="d-grid gap-2">
+              <a href="{{ edit_url }}" class="btn btn-outline-secondary">
+                <i class="bi bi-pencil-square me-1"></i> Edit Item
+              </a>
+
+              <button
+                type="button"
+                class="btn btn-outline-danger"
+                data-bs-toggle="modal"
+                data-bs-target="#confirmDeleteModal"
+                data-delete-url="{{ delete_url }}"
+                data-item-title="{{ item.title }}"
+              >
+                <i class="bi bi-trash me-1"></i> Delete Item
+              </button>
+            </div>
+
+          {% elif is_guest %}
+            <div class="alert alert-info">
+              Please <a href="{{ login_url }}">log in</a> or
+              <a href="{{ register_url }}">register</a> to claim this item.
+            </div>
+
+          {% elif claim_url %}
+            <a href="{{ claim_url }}" class="btn btn-primary w-100">
+              Claim this item
+            </a>
+
+          {% else %}
+            <div class="alert alert-secondary mb-0">
+              Claiming is not available for this item.
+            </div>
+          {% endif %}
+
+          <a href="{{ search_url }}" class="btn btn-link mt-3 px-0">← Back to search</a>
+        </div>
       </div>
     </div>
   </div>

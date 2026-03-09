@@ -12,6 +12,7 @@ This project is **Docker-first** (recommended), but supports **local setup** as 
 
 1. Install VS Code extensions:
    - Dev Containers
+   
    - Python
    - Docker
 

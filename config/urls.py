@@ -3,6 +3,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import include, path
 
+handler404 = "apps.core.views.custom_404_view"
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("auth/", include("apps.users.urls")),
