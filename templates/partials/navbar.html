@@ -52,8 +52,16 @@
           </form>
         {% endif %}
 
-        <!-- Right: Auth buttons -->
+        <!-- Right: Auth buttons / navigation -->
         <ul class="navbar-nav ms-lg-auto align-items-lg-center gap-2">
+
+          {% if mode == "public" %}
+            <li class="nav-item">
+              <a class="btn btn-outline-secondary btn-sm" href="{% url 'listings:faq' %}">
+                <i class="bi bi-question-circle me-1"></i> FAQ
+              </a>
+            </li>
+          {% endif %}
 
           {% if user.is_authenticated %}
             {% if mode == "public" %}

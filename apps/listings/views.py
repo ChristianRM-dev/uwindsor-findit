@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.core.paginator import Paginator
@@ -6,10 +7,9 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
 
-from apps.listings.forms import ClaimCreateForm, ReportLostItemForm
+from apps.listings.forms import ClaimCreateForm, ReportLostItemForm, ItemEditForm
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item
 from apps.listings.models import ItemImage
-
 
 def _build_claim_proof_entries(proofs):
     image_extensions = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
@@ -172,6 +172,9 @@ def item_detail_view(request, pk: int):
         "login_url": login_url,
         "register_url": register_url,
         "search_url": reverse("listings:search_results"),
+        "is_owner": request.user.is_authenticated and item.reporter_id == request.user.id,
+        "edit_url": reverse("listings:item_edit", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
+        "delete_url": reverse("listings:item_delete", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
     }
     return render(request, "listings/item_detail.html", context)
 
@@ -441,6 +444,84 @@ def my_items_view(request):
     }
     return render(request, "listings/my_items.html", context)
 
+@login_required
+def item_edit_view(request, pk: int):
+    item = get_object_or_404(
+        Item.objects.filter(is_visible=True).select_related("category", "location", "reporter"),
+        pk=pk,
+    )
+
+    if item.reporter_id != request.user.id:
+        raise Http404("Item not found.")
+
+    form = ItemEditForm(request.POST or None, request.FILES or None, instance=item)
+
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            updated_item = form.save()
+
+            for photo in request.FILES.getlist("photos")[: ItemEditForm.max_files]:
+                ItemImage.objects.create(
+                    item=updated_item,
+                    image=photo,
+                    uploaded_by=request.user,
+                )
+
+        messages.success(request, "Item updated successfully.")
+        return redirect("listings:item_detail_public", pk=item.pk)
+
+    context = {
+        "item": item,
+        "form": form,
+        "images": item.images.all(),
+        "cancel_url": reverse("listings:my_items"),
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "My Items", "url": reverse("listings:my_items"), "active": False},
+            {"label": f"Edit #{item.id}", "url": None, "active": True},
+        ],
+    }
+    return render(request, "listings/item_edit.html", context)
+
+
+@login_required
+def item_delete_view(request, pk: int):
+    item = get_object_or_404(
+        Item.objects.filter(is_visible=True).select_related("reporter"),
+        pk=pk,
+    )
+
+    if item.reporter_id != request.user.id:
+        raise Http404("Item not found.")
+
+    if request.method == "POST":
+        item.is_visible = False
+        item.save(update_fields=["is_visible", "updated_at"])
+        messages.success(request, "Item deleted successfully.")
+        return redirect("listings:my_items")
+
+    context = {
+        "item": item,
+        "cancel_url": reverse("listings:my_items"),
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "My Items", "url": reverse("listings:my_items"), "active": False},
+            {"label": f"Delete #{item.id}", "url": None, "active": True},
+        ],
+    }
+    return render(request, "listings/item_delete_confirm.html", context)
+
+
+def faq_view(request):
+    context = {
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "FAQ", "url": None, "active": True},
+        ],
+    }
+    return render(request, "listings/faq.html", context)
 
 @login_required
 def claim_detail_view(request, claim_id: int):

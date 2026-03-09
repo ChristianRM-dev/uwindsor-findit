@@ -6,6 +6,7 @@ from datetime import datetime
 from types import SimpleNamespace
 
 from apps.listings.models import Claim, Item
+from django.shortcuts import render
 
 def home_view(request: HttpRequest) -> HttpResponse:
     return render(request, "core/home.html")
@@ -71,3 +72,6 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         ],
     }
     return render(request, "core/dashboard.html", context)
+
+def custom_404_view(request, exception):
+    return render(request, "404.html", status=404)

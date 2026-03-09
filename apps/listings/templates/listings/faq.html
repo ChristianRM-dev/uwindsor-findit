@@ -1,0 +1,71 @@
+{% extends "layouts/public_base.html" %}
+
+{% block title %}FAQ{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  {% include "partials/breadcrumbs.html" with items=breadcrumb_items %}
+
+  <div class="row justify-content-center">
+    <div class="col-lg-9">
+      <h1 class="mb-4">Frequently Asked Questions</h1>
+
+      <div class="accordion" id="faqAccordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="faqOne">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#faqOneBody">
+              How do I report a lost item?
+            </button>
+          </h2>
+          <div id="faqOneBody" class="accordion-collapse collapse show" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Sign in to your account, go to the dashboard, and choose “Report Lost Item”.
+              Fill in the title, category, date, location, description, and optional photos.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="faqTwo">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqTwoBody">
+              How do I claim an item?
+            </button>
+          </h2>
+          <div id="faqTwoBody" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Open the item details page and click “Claim this item”. You will need to provide identifying details
+              and upload proof such as photos or documents.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="faqThree">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqThreeBody">
+              Can I edit or delete my item?
+            </button>
+          </h2>
+          <div id="faqThreeBody" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Yes. Go to “My Items” from your dashboard. You can view, edit, or delete items that you reported.
+            </div>
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="faqFour">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faqFourBody">
+              Who can see my claim?
+            </button>
+          </h2>
+          <div id="faqFourBody" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+            <div class="accordion-body">
+              Claims are visible only to the claimant, the item reporter, and authorized staff/admin users.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
