@@ -1,42 +1,296 @@
 {% extends "layouts/public_base.html" %}
+{% load static %}
 
 {% block title %}Home | FindIt{% endblock %}
 
+{% block extra_head %}
+  <style>
+    :root {
+      --home-navy: #0f2747;
+      --home-gold: #c89b3c;
+      --home-section-bg: #f5f7fb;
+    }
+
+    .home-full-bleed {
+      margin-right: calc(50% - 50vw);
+      margin-left: calc(50% - 50vw);
+    }
+
+    .home-hero {
+      margin-top: -1.5rem;
+      background-image:
+        linear-gradient(rgba(15, 39, 71, 0.72), rgba(15, 39, 71, 0.72)),
+        url("{% static 'img/home-hero-campus.jpg' %}");
+      background-position: center;
+      background-size: cover;
+    }
+
+    .home-quick-actions {
+      background: var(--home-section-bg);
+    }
+
+    .home-panel-dark {
+      background: var(--home-navy);
+    }
+
+    .home-btn-gold {
+      color: #fff;
+      background: var(--home-gold);
+      border-color: var(--home-gold);
+    }
+
+    .home-btn-gold:hover,
+    .home-btn-gold:focus {
+      color: #fff;
+      background: #b4882f;
+      border-color: #b4882f;
+    }
+
+    .home-btn-navy {
+      color: #fff;
+      background: var(--home-navy);
+      border-color: var(--home-navy);
+    }
+
+    .home-btn-navy:hover,
+    .home-btn-navy:focus {
+      color: #fff;
+      background: #0a1d35;
+      border-color: #0a1d35;
+    }
+
+    .home-action-icon {
+      width: 3rem;
+      height: 3rem;
+    }
+
+    .home-tabs .nav-link {
+      color: var(--bs-secondary-color);
+      font-weight: 600;
+    }
+
+    .home-tabs .nav-link.active {
+      color: var(--home-navy);
+      border-color: transparent transparent var(--home-navy);
+      border-bottom-width: 3px;
+    }
+
+    .home-item-card {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .home-item-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--bs-box-shadow-lg) !important;
+    }
+
+    @media (max-width: 991.98px) {
+      .home-hero {
+        margin-top: -1rem;
+      }
+    }
+  </style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-12 col-lg-9">
-    <div class="p-4 p-md-5 bg-white rounded shadow-sm">
-      <div class="d-flex align-items-center mb-3">
-        <i class="bi bi-geo-alt-fill fs-3 me-3 text-primary"></i>
-        <div>
-          <h1 class="h3 mb-0">FindIt</h1>
-          <p class="text-muted mb-0">A UWindsor-only platform.</p>
+{% url 'users:register' as register_url %}
+<section class="home-full-bleed home-hero text-white">
+  <div class="container px-4 py-5">
+    <div class="row justify-content-center">
+      <div class="col-12 col-xl-8 text-center py-lg-5">
+        <h1 class="display-4 fw-bold mb-3">Lost something on campus?</h1>
+        <p class="lead text-white-50 mb-4">
+          UWindsor FindIt helps students and staff report, search, and recover lost items across campus quickly and securely.
+        </p>
+
+        <form
+          class="mx-auto"
+          method="get"
+          action="{% url 'listings:search_results' %}"
+          role="search"
+          style="max-width: 760px;"
+        >
+          <div class="input-group input-group-lg shadow">
+            <input
+              type="search"
+              name="q"
+              class="form-control border-0"
+              placeholder="Search by keyword, category, or location..."
+              aria-label="Search by keyword, category, or location"
+              value="{{ request.GET.q|default:'' }}"
+            >
+            <button class="btn home-btn-gold px-4" type="submit">
+              <i class="bi bi-search me-sm-2"></i>
+              <span class="d-none d-sm-inline">Search</span>
+            </button>
+          </div>
+        </form>
+
+        <p class="small text-white-50 mt-3 mb-0">
+          e.g. "black backpack", "Leddy Library", "student ID"
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="home-full-bleed home-quick-actions py-5">
+  <div class="container px-4">
+    <div class="row g-4">
+      <div class="col-12 col-md-6 col-xl-4">
+        <div class="card h-100 border-0 shadow-sm">
+          <div class="card-body p-4 p-lg-5">
+            <div class="home-action-icon rounded-3 bg-danger-subtle text-danger d-inline-flex align-items-center justify-content-center mb-4">
+              <i class="bi bi-eye fs-4"></i>
+            </div>
+            <h2 class="h4 mb-3">Browse Lost Items</h2>
+            <p class="text-muted mb-4">
+              See items recently reported as lost by the campus community.
+            </p>
+            <a class="btn home-btn-navy" href="{% url 'listings:search_results' %}?status=LOST">
+              Browse Lost Items
+            </a>
+          </div>
         </div>
       </div>
 
-      <p class="mb-4">
-        This is the public page. Register with your <strong>@uwindsor.ca</strong> email to access the dashboard.
-      </p>
+      <div class="col-12 col-md-6 col-xl-4">
+        <div class="card h-100 border-0 shadow-sm">
+          <div class="card-body p-4 p-lg-5">
+            <div class="home-action-icon rounded-3 bg-success-subtle text-success d-inline-flex align-items-center justify-content-center mb-4">
+              <i class="bi bi-check-circle fs-4"></i>
+            </div>
+            <h2 class="h4 mb-3">Browse Found Items</h2>
+            <p class="text-muted mb-4">
+              See items that have been turned in or found around campus.
+            </p>
+            <a class="btn home-btn-navy" href="{% url 'listings:search_results' %}?status=FOUND">
+              Browse Found Items
+            </a>
+          </div>
+        </div>
+      </div>
 
-      {% if user.is_authenticated %}
-      <a class="btn btn-primary" href="{% url 'core:dashboard' %}">
-        <i class="bi bi-speedometer2 me-1"></i> Go to Dashboard
-      </a>
+      <div class="col-12 col-md-6 col-xl-4">
+        <div class="card h-100 border-0 shadow-sm">
+          <div class="card-body p-4 p-lg-5">
+            <div class="home-action-icon rounded-3 bg-info-subtle text-info d-inline-flex align-items-center justify-content-center mb-4">
+              <i class="bi bi-info-circle fs-4"></i>
+            </div>
+            <h2 class="h4 mb-3">How It Works</h2>
+            <p class="text-muted mb-4">
+              Learn how to report a lost item, browse results, and submit a claim.
+            </p>
+            <a class="btn home-btn-navy" href="{% url 'listings:faq' %}">
+              Learn More
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="py-5">
+  <div class="d-flex justify-content-between align-items-start flex-column flex-md-row gap-3 mb-4">
+    <div>
+      <h2 class="display-6 fw-semibold mb-2">Recent Activity</h2>
+      <p class="text-muted mb-0">Browse the latest lost and found reports from around campus.</p>
+    </div>
+  </div>
+
+  <ul class="nav nav-tabs home-tabs border-bottom mb-4" id="recentActivityTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button
+        class="nav-link active"
+        id="recent-lost-tab"
+        data-bs-toggle="tab"
+        data-bs-target="#recent-lost-panel"
+        type="button"
+        role="tab"
+        aria-controls="recent-lost-panel"
+        aria-selected="true"
+      >
+        Recent Lost
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button
+        class="nav-link"
+        id="recent-found-tab"
+        data-bs-toggle="tab"
+        data-bs-target="#recent-found-panel"
+        type="button"
+        role="tab"
+        aria-controls="recent-found-panel"
+        aria-selected="false"
+      >
+        Recent Found
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content" id="recentActivityTabContent">
+    <div
+      class="tab-pane fade show active"
+      id="recent-lost-panel"
+      role="tabpanel"
+      aria-labelledby="recent-lost-tab"
+      tabindex="0"
+    >
+      {% if recent_lost_items %}
+        <div class="row g-4">
+          {% for item in recent_lost_items %}
+            <div class="col-12 col-md-6 col-xl-3">
+              {% include "partials/home_item_card.html" with item=item %}
+            </div>
+          {% endfor %}
+        </div>
       {% else %}
-      <a class="btn btn-primary me-2" href="{% url 'users:register' %}">
-        <i class="bi bi-person-plus me-1"></i> Register
-      </a>
-      <a class="btn btn-outline-primary" href="{% url 'users:login' %}">
-        <i class="bi bi-box-arrow-in-right me-1"></i> Login
-      </a>
+        {% include "partials/empty_state.html" with title="No lost items yet" message="No public lost-item reports are available yet. Create an account to get started." cta_url=register_url cta_label="Register" %}
       {% endif %}
     </div>
-    <hr class="my-4" />
 
-    <a class="btn btn-outline-secondary" href="{% url 'core:components_demo' %}">
-      <i class="bi bi-ui-checks-grid me-1"></i> Components Demo
-    </a>
-
+    <div
+      class="tab-pane fade"
+      id="recent-found-panel"
+      role="tabpanel"
+      aria-labelledby="recent-found-tab"
+      tabindex="0"
+    >
+      {% if recent_found_items %}
+        <div class="row g-4">
+          {% for item in recent_found_items %}
+            <div class="col-12 col-md-6 col-xl-3">
+              {% include "partials/home_item_card.html" with item=item %}
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        {% include "partials/empty_state.html" with title="No found items yet" message="No public found-item reports are available yet. Create an account to stay ready." cta_url=register_url cta_label="Register" %}
+      {% endif %}
+    </div>
   </div>
-</div>
+</section>
+
+<section class="home-full-bleed home-panel-dark text-white py-5 mt-4">
+  <div class="container px-4">
+    <div class="row justify-content-center">
+      <div class="col-12 col-xl-8 text-center">
+        <h2 class="display-6 fw-semibold mb-3">Ready to help your campus community?</h2>
+        <p class="lead text-white-50 mb-4">
+          Sign in to report lost items, review recent activity, and submit a claim when you spot your item.
+        </p>
+        <div class="d-flex flex-column flex-sm-row justify-content-center gap-3">
+          <a class="btn btn-outline-light btn-lg px-4" href="{% url 'users:login' %}">
+            Login
+          </a>
+          <a class="btn home-btn-gold btn-lg px-4" href="{% url 'users:register' %}">
+            Register
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
 {% endblock %}
