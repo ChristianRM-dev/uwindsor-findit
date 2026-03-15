@@ -1,0 +1,88 @@
+{% extends "layouts/public_base.html" %}
+
+{% block title %}Contact Owner | FindIt{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <a href="{{ cancel_url }}" class="btn btn-link px-0 mb-3 text-decoration-none">
+      <i class="bi bi-arrow-left me-1"></i>Back to Item Details
+    </a>
+
+    <div class="mb-4">
+      <h1 class="h2 mb-2">Contact Item Owner</h1>
+      <p class="text-muted mb-0">Send a message to the person who reported this item.</p>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body">
+        <div class="row g-3 align-items-start">
+          <div class="col-md-8">
+            <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+              <div>
+                <h2 class="h4 mb-1">{{ item.title }}</h2>
+                <div class="text-muted small">{{ item.category.name }} • {{ item.location.name }}</div>
+              </div>
+              <span class="badge {% if item.status == 'LOST' %}text-bg-danger{% else %}text-bg-success{% endif %}">
+                {{ item.get_status_display }}
+              </span>
+            </div>
+
+            <div class="row g-2 small text-muted">
+              <div class="col-sm-6"><strong>Reported by:</strong> {{ owner.get_full_name|default:owner.email }}</div>
+              <div class="col-sm-6"><strong>Date:</strong> {{ item.event_date|date:"M d, Y H:i" }}</div>
+              <div class="col-12"><strong>Description:</strong> {{ item.description }}</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="alert alert-primary mb-0">
+              <div class="fw-semibold mb-1">Sending as</div>
+              <div>{{ request.user.get_full_name|default:request.user.email }}</div>
+              <div class="small text-muted">{{ request.user.email }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <form method="post" novalidate>
+          {% csrf_token %}
+
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+          {% endif %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="id_message">Your Message</label>
+            {{ form.message }}
+            <div class="form-text">Include enough detail to help verify ownership and arrange a safe meetup.</div>
+            {% if form.message.errors %}
+              <div class="text-danger small mt-1">{{ form.message.errors|join:', ' }}</div>
+            {% endif %}
+          </div>
+
+          <div class="alert alert-warning">
+            <div class="fw-semibold mb-2">Safety Tips</div>
+            <ul class="mb-0 ps-3">
+              <li>Meet in a public campus location.</li>
+              <li>Do not share sensitive personal information in chat.</li>
+              <li>Verify ownership details before handing over an item.</li>
+            </ul>
+          </div>
+
+          <div class="d-flex flex-column-reverse flex-sm-row justify-content-sm-end gap-2 pt-2">
+            <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-send me-1"></i>Send Message
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

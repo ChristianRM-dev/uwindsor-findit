@@ -89,6 +89,7 @@ TEMPLATES = [
                 "django.template.context_processors.media",
                 "django.template.context_processors.static",
                 "django.template.context_processors.tz",
+                "apps.chat.context_processors.chat_notifications",
             ],
         },
     },

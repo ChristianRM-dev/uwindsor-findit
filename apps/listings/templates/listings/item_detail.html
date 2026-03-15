@@ -76,13 +76,21 @@
           {% elif is_guest %}
             <div class="alert alert-info">
               Please <a href="{{ login_url }}">log in</a> or
-              <a href="{{ register_url }}">register</a> to claim this item.
+              <a href="{{ register_url }}">register</a> to contact the owner or claim this item.
             </div>
 
-          {% elif claim_url %}
-            <a href="{{ claim_url }}" class="btn btn-primary w-100">
-              Claim this item
-            </a>
+          {% elif contact_url %}
+            <div class="d-grid gap-2">
+              <a href="{{ contact_url }}" class="btn btn-primary">
+                <i class="bi bi-chat-dots me-1"></i> Contact Owner
+              </a>
+
+              {% if claim_url %}
+                <a href="{{ claim_url }}" class="btn btn-outline-primary">
+                  Claim this item
+                </a>
+              {% endif %}
+            </div>
 
           {% else %}
             <div class="alert alert-secondary mb-0">
