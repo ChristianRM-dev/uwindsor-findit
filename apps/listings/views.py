@@ -169,6 +169,7 @@ def item_detail_view(request, pk: int):
         "images": item.images.all(),
         "is_guest": is_guest,
         "claim_url": claim_url,
+        "contact_url": reverse("chat:contact_owner", kwargs={"item_id": item.pk}) if request.user.is_authenticated and item.reporter_id != request.user.id else None,
         "login_url": login_url,
         "register_url": register_url,
         "search_url": reverse("listings:search_results"),

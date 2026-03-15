@@ -1,0 +1,73 @@
+{% extends "layouts/public_base.html" %}
+
+{% block title %}Conversation | FindIt{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body d-flex flex-column flex-lg-row justify-content-between gap-3">
+        <div>
+          <h1 class="h3 mb-1">Conversation with {{ other_participant.get_full_name|default:other_participant.email }}</h1>
+          <div class="text-muted small mb-2">{{ other_participant.email }}</div>
+          {% if conversation.item %}
+            <div class="small text-muted">
+              About item:
+              <a href="{% url 'listings:item_detail_public' conversation.item.pk %}">{{ conversation.item.title }}</a>
+            </div>
+          {% endif %}
+        </div>
+        <div class="text-lg-end">
+          <a href="{% url 'chat:message_list' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left me-1"></i>Back to Messages
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body p-4">
+        <div class="d-grid gap-3">
+          {% for message in thread_messages %}
+            <div class="d-flex {% if message.sender_id == request.user.id %}justify-content-end{% else %}justify-content-start{% endif %}">
+              <div class="rounded-4 px-3 py-3 {% if message.sender_id == request.user.id %}bg-primary text-white{% else %}bg-light border{% endif %}" style="max-width: 44rem; width: fit-content;">
+                <div class="small {% if message.sender_id == request.user.id %}text-white-50{% else %}text-muted{% endif %} mb-1">
+                  {{ message.sender.get_full_name|default:message.sender.email }}
+                </div>
+                <div style="white-space: pre-wrap;">{{ message.content }}</div>
+                <div class="small {% if message.sender_id == request.user.id %}text-white-50{% else %}text-muted{% endif %} mt-2">
+                  {{ message.created_at|date:"M d, Y H:i" }}
+                </div>
+              </div>
+            </div>
+          {% empty %}
+            <p class="text-muted mb-0">No messages in this conversation yet.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <h2 class="h5 mb-3">Reply</h2>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="mb-3">
+            {{ form.message }}
+            {% if form.message.errors %}
+              <div class="text-danger small mt-1">{{ form.message.errors|join:', ' }}</div>
+            {% endif %}
+          </div>
+          <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-send me-1"></i>Send Reply
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

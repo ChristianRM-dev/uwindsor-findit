@@ -1,0 +1,67 @@
+{% extends "layouts/public_base.html" %}
+
+{% block title %}Messages | FindIt{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-xl-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 class="h2 mb-1">Messages</h1>
+        <p class="text-muted mb-0">Review your conversations and open a thread to reply.</p>
+      </div>
+    </div>
+
+    {% if conversation_cards %}
+      <div class="d-grid gap-3">
+        {% for card in conversation_cards %}
+          <a href="{% url 'chat:message_thread' card.conversation.pk %}" class="card border-0 shadow-sm text-decoration-none text-reset">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start gap-3">
+                <div>
+                  <div class="d-flex align-items-center gap-2 mb-1">
+                    <h2 class="h5 mb-0">{{ card.other_participant.get_full_name|default:card.other_participant.email }}</h2>
+                    {% if card.unread_count %}
+                      <span class="badge text-bg-danger">{{ card.unread_count }} new</span>
+                    {% endif %}
+                  </div>
+                  <div class="small text-muted mb-2">
+                    {% if card.conversation.item %}
+                      Re: {{ card.conversation.item.title }}
+                    {% else %}
+                      Conversation #{{ card.conversation.pk }}
+                    {% endif %}
+                  </div>
+                  {% if card.latest_message %}
+                    <p class="mb-0 text-muted">
+                      <strong>{{ card.latest_message.sender.get_full_name|default:card.latest_message.sender.email }}:</strong>
+                      {{ card.latest_message.content|truncatechars:120 }}
+                    </p>
+                  {% endif %}
+                </div>
+                <div class="text-muted small text-nowrap">
+                  {% if card.latest_message %}
+                    {{ card.latest_message.created_at|date:"M d, Y H:i" }}
+                  {% else %}
+                    {{ card.conversation.updated_at|date:"M d, Y H:i" }}
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+          <div class="display-6 mb-3 text-muted"><i class="bi bi-chat-dots"></i></div>
+          <h2 class="h4">No messages yet</h2>
+          <p class="text-muted mb-0">When you contact an item owner, your conversations will appear here.</p>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

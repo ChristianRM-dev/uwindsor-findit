@@ -8,6 +8,7 @@ handler404 = "apps.core.views.custom_404_view"
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("auth/", include("apps.users.urls")),
+    path("", include("apps.chat.urls")),
     path("", include("apps.core.urls")),
     path("", include("apps.listings.urls")),
 ]
