@@ -1,15 +1,23 @@
 from django.contrib.auth.decorators import login_required
+from datetime import datetime
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
-from datetime import datetime
 from types import SimpleNamespace
 
 from apps.listings.models import Claim, Item
-from django.shortcuts import render
 
 def home_view(request: HttpRequest) -> HttpResponse:
-    return render(request, "core/home.html")
+    base_items_qs = (
+        Item.objects.filter(is_visible=True)
+        .select_related("category", "location")
+        .prefetch_related("images")
+    )
+    context = {
+        "recent_lost_items": base_items_qs.filter(status=Item.Status.LOST).order_by("-created_at")[:4],
+        "recent_found_items": base_items_qs.filter(status=Item.Status.FOUND).order_by("-created_at")[:4],
+    }
+    return render(request, "core/home.html", context)
 
 def components_demo_view(request: HttpRequest) -> HttpResponse:
     # Simple demo objects to feed into item_card.html
