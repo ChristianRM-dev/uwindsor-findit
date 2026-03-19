@@ -7,7 +7,7 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
 
-from apps.listings.forms import ClaimCreateForm, ReportLostItemForm, ItemEditForm
+from apps.listings.forms import ClaimCreateForm, ReportFoundItemForm, ReportLostItemForm, ItemEditForm
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item
 from apps.listings.models import ItemImage
 
@@ -77,6 +77,24 @@ def _parse_claim_description(description: str):
         parsed["claim_details"] = description.strip()
 
     return parsed
+
+
+def _build_report_page_context(*, form, item_type: str):
+    item_label = "Found" if item_type == Item.ItemType.FOUND else "Lost"
+    action_label = "found" if item_type == Item.ItemType.FOUND else "lost"
+
+    return {
+        "form": form,
+        "cancel_url": reverse("core:dashboard"),
+        "page_title": f"Report a {item_label} Item",
+        "page_subtitle": f"Provide as many details as possible to help others identify what you {action_label}.",
+        "submit_label": "Submit Report",
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": f"Report {item_label} Item", "url": None, "active": True},
+        ],
+    }
 
 
 def search_results_view(request):
@@ -201,15 +219,32 @@ def report_lost_item_view(request):
 
         return redirect(reverse("listings:item_detail_public", kwargs={"pk": item.pk}))
 
-    context = {
-        "form": form,
-        "cancel_url": reverse("core:dashboard"),
-        "breadcrumb_items": [
-            {"label": "Home", "url": reverse("core:home"), "active": False},
-            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
-            {"label": "Report Lost Item", "url": None, "active": True},
-        ],
-    }
+    context = _build_report_page_context(form=form, item_type=Item.ItemType.LOST)
+    return render(request, "listings/report_lost_item.html", context)
+
+
+@login_required
+def report_found_item_view(request):
+    form = ReportFoundItemForm(request.POST or None, request.FILES or None)
+
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            item = form.save(commit=False)
+            item.reporter = request.user
+            item.item_type = Item.ItemType.FOUND
+            item.status = Item.Status.FOUND
+            item.save()
+
+            for photo in request.FILES.getlist("photos")[: ReportFoundItemForm.max_files]:
+                ItemImage.objects.create(
+                    item=item,
+                    image=photo,
+                    uploaded_by=request.user,
+                )
+
+        return redirect(reverse("listings:item_detail_public", kwargs={"pk": item.pk}))
+
+    context = _build_report_page_context(form=form, item_type=Item.ItemType.FOUND)
     return render(request, "listings/report_lost_item.html", context)
 
 
@@ -459,7 +494,14 @@ def item_edit_view(request, pk: int):
 
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            updated_item = form.save()
+            updated_item = form.save(commit=False)
+            if updated_item.status in {Item.Status.LOST, Item.Status.FOUND}:
+                updated_item.claimed_by = None
+            updated_item.save()
+            form.save_m2m()
+
+            for image in form.cleaned_data["remove_images"]:
+                image.delete()
 
             for photo in request.FILES.getlist("photos")[: ItemEditForm.max_files]:
                 ItemImage.objects.create(

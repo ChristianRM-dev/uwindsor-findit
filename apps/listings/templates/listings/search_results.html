@@ -46,9 +46,10 @@
 </div>
 
     <div class="col-md-3">
-      <div class="d-flex gap-2">
+      <div class="d-flex gap-2 flex-wrap">
         <button class="btn btn-primary flex-fill" type="submit">Apply</button>
-        <a class="btn btn-outline-secondary flex-fill" href="{% url 'listings:report_lost_item' %}">Report Lost Item</a>
+        <a class="btn btn-outline-secondary flex-fill" href="{% url 'listings:report_lost_item' %}">Report Lost</a>
+        <a class="btn btn-outline-secondary flex-fill" href="{% url 'listings:report_found_item' %}">Report Found</a>
       </div>
 </div>
 </form>

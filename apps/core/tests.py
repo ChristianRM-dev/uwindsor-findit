@@ -55,6 +55,7 @@ class DashboardViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dashboard")
         self.assertContains(response, "Report Lost Item")
+        self.assertContains(response, "Report Found Item")
         self.assertContains(response, "My Items")
         self.assertContains(response, "My Claims")
         self.assertContains(response, "Claims Received")
@@ -164,3 +165,19 @@ class HomeLandingContentTests(TestCase):
         self.assertContains(response, "No found items yet")
         self.assertContains(response, "Create an account to stay ready.")
         self.assertContains(response, f'href="{reverse("users:register")}"')
+
+
+class StaticPageTests(TestCase):
+    def test_about_page_renders(self):
+        response = self.client.get(reverse("core:about"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "About FindIt")
+        self.assertContains(response, "Report lost and found items")
+
+    def test_contact_page_renders(self):
+        response = self.client.get(reverse("core:contact"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Contact")
+        self.assertContains(response, "support@findit.local")

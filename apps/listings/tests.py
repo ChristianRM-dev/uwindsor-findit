@@ -195,6 +195,85 @@ class ReportLostItemViewTests(TestCase):
         self.assertRegex(event_date_max, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
 
 
+class ReportFoundItemViewTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="findit-found-test-media-")
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(lambda: shutil.rmtree(self.media_root, ignore_errors=True))
+
+        self.url = reverse("listings:report_found_item")
+        self.dashboard_url = reverse("core:dashboard")
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="finder@uwindsor.ca",
+            email="finder@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Accessories", slug="accessories", is_active=True)
+        self.location = CampusLocation.objects.create(name="Odette", code="odette", is_active=True)
+
+    def _valid_image_file(self, name: str = "photo.png") -> SimpleUploadedFile:
+        image = Image.new("RGB", (50, 50), color=(80, 120, 160))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
+
+    def test_authenticated_get_renders_found_form(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Report a Found Item")
+        self.assertContains(response, "When did you find it?")
+        self.assertContains(response, f'href="{self.dashboard_url}"')
+
+    def test_creates_found_item_and_image_and_redirects(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "title": "Silver keychain",
+            "category": str(self.category.pk),
+            "event_date": (timezone.now() - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": "Found near the main lobby desk.",
+        }
+
+        response = self.client.post(
+            self.url,
+            data={**payload, "photos": self._valid_image_file()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created_item = Item.objects.get(title="Silver keychain")
+        self.assertEqual(created_item.item_type, Item.ItemType.FOUND)
+        self.assertEqual(created_item.status, Item.Status.FOUND)
+        self.assertEqual(created_item.reporter, self.user)
+        self.assertEqual(ItemImage.objects.filter(item=created_item).count(), 1)
+
+    def test_found_form_rejects_future_date(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "title": "Campus card",
+            "category": str(self.category.pk),
+            "event_date": (timezone.now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": "Future date should fail.",
+        }
+
+        response = self.client.post(self.url, data=payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Date found cannot be in the future.")
+        self.assertEqual(Item.objects.count(), 0)
+
+
 class ClaimCreateViewTests(TestCase):
     def setUp(self):
         self.media_root = tempfile.mkdtemp(prefix="findit-claim-test-media-")
@@ -671,7 +750,8 @@ class MyItemsViewTests(TestCase):
         self.assertContains(response, self.item_2.title)
         self.assertNotContains(response, self.other_item.title)
         self.assertContains(response, "Pending claims: 1")
-        self.assertContains(response, "Create New")
+        self.assertContains(response, "Report Lost")
+        self.assertContains(response, "Report Found")
         self.assertContains(response, "Claims Received")
 
 
@@ -769,5 +849,105 @@ class ClaimDetailViewTests(TestCase):
 
     def test_unrelated_user_gets_404(self):
         self.client.login(username=self.third_user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)
+
+
+class ItemEditViewTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="findit-item-edit-media-")
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(lambda: shutil.rmtree(self.media_root, ignore_errors=True))
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="item-owner@uwindsor.ca",
+            email="item-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="item-other@uwindsor.ca",
+            email="item-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Keys", slug="keys", is_active=True)
+        self.location = CampusLocation.objects.create(name="Library", code="library-main", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.user,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Key fob",
+            description="Black key fob",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.image_1 = ItemImage.objects.create(item=self.item, image=self._valid_image_file("img-1.png"))
+        self.image_2 = ItemImage.objects.create(item=self.item, image=self._valid_image_file("img-2.png"))
+        self.url = reverse("listings:item_edit", kwargs={"pk": self.item.pk})
+
+    def _valid_image_file(self, name: str = "photo.png") -> SimpleUploadedFile:
+        image = Image.new("RGB", (50, 50), color=(100, 110, 120))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
+
+    def test_owner_can_update_status_remove_image_and_add_new_one(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "title": "Key fob updated",
+            "category": str(self.category.pk),
+            "status": Item.Status.RETURNED,
+            "event_date": (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": "Returned to the owner.",
+            "remove_images": [str(self.image_1.pk)],
+        }
+
+        response = self.client.post(
+            self.url,
+            data={**payload, "photos": self._valid_image_file("replacement.png")},
+            format="multipart",
+        )
+
+        self.assertRedirects(response, reverse("listings:item_detail_public", kwargs={"pk": self.item.pk}))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.title, "Key fob updated")
+        self.assertEqual(self.item.status, Item.Status.RETURNED)
+        self.assertFalse(ItemImage.objects.filter(pk=self.image_1.pk).exists())
+        self.assertEqual(ItemImage.objects.filter(item=self.item).count(), 2)
+        self.assertTrue(ItemImage.objects.filter(item=self.item, image__icontains="replacement").exists())
+
+    def test_rejects_when_total_image_count_would_exceed_limit(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        for idx in range(3):
+            ItemImage.objects.create(item=self.item, image=self._valid_image_file(f"extra-{idx}.png"))
+
+        payload = {
+            "title": self.item.title,
+            "category": str(self.category.pk),
+            "status": Item.Status.LOST,
+            "event_date": (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": self.item.description,
+        }
+
+        response = self.client.post(
+            self.url,
+            data={**payload, "photos": self._valid_image_file("overflow.png")},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You can keep up to 5 photos total.")
+
+    def test_non_owner_gets_404(self):
+        self.client.login(username=self.other_user.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)

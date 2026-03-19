@@ -81,5 +81,34 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
     }
     return render(request, "core/dashboard.html", context)
 
+
+def about_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "About", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/about.html", context)
+
+
+def contact_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Contact", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/contact.html", context)
+
+
 def custom_404_view(request, exception):
     return render(request, "404.html", status=404)
+
+
+def custom_403_view(request, exception):
+    return render(request, "403.html", status=403)
+
+
+def custom_500_view(request):
+    return render(request, "500.html", status=500)

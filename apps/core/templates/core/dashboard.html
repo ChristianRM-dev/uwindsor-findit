@@ -15,7 +15,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:report_lost_item' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">Report Lost Item</h2>
@@ -23,7 +23,15 @@
           </div>
         </a>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
+        <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:report_found_item' %}">
+          <div class="card-body">
+            <h2 class="h6 mb-2">Report Found Item</h2>
+            <p class="small text-muted mb-0">Create a new found item report.</p>
+          </div>
+        </a>
+      </div>
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:my_items' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">My Items</h2>
@@ -31,7 +39,7 @@
           </div>
         </a>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:my_claims' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">My Claims</h2>
@@ -39,7 +47,7 @@
           </div>
         </a>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:my_received_claims' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">Claims Received</h2>
