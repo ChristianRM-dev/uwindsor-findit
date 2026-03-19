@@ -5,13 +5,8 @@ from apps.listings import views
 app_name = "listings"
 
 urlpatterns = [
-<<<<<<< Updated upstream
-    path("search", views.search_results_view, name="search_results"),
-    path("faq/", views.faq_view, name="faq"),
-
-=======
     path("search/", views.search_results_view, name="search_results"),
->>>>>>> Stashed changes
+    path("faq/", views.faq_view, name="faq"),
     path("items/<int:pk>", views.item_detail_view, name="item_detail_public"),
     path("items/<int:pk>/edit/", views.item_edit_view, name="item_edit"),
     path("items/<int:pk>/delete/", views.item_delete_view, name="item_delete"),
