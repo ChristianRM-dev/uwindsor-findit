@@ -6,7 +6,6 @@ from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
-from django.utils import timezone
 
 from apps.listings.forms import (
     ClaimCreateForm,
@@ -17,6 +16,7 @@ from apps.listings.forms import (
 )
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item
 from apps.listings.models import ItemImage
+from apps.listings.services import ClaimReviewError, review_claim
 
 def _build_claim_proof_entries(proofs):
     image_extensions = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
@@ -659,50 +659,20 @@ def claim_review_view(request, claim_id: int):
     decision = review_form.cleaned_data["decision"]
     reviewer_notes = review_form.cleaned_data["reviewer_notes"]
 
-    with transaction.atomic():
-        claim = Claim.objects.select_for_update().select_related(
-            "item",
-            "claimant",
-            "item__reporter",
-            "reviewer",
-        ).get(pk=claim.pk)
+    try:
+        review_claim(
+            claim=claim,
+            reviewer=request.user,
+            decision=decision,
+            reviewer_notes=reviewer_notes,
+        )
+    except ClaimReviewError as exc:
+        messages.error(request, str(exc))
+        return redirect("listings:claim_detail", claim_id=claim.id)
 
-        if claim.status != Claim.Status.PENDING:
-            messages.info(request, "This claim has already been reviewed.")
-            return redirect("listings:claim_detail", claim_id=claim.id)
-
-        if decision == ClaimReviewForm.DECISION_APPROVE and claim.item.status != Item.Status.LOST:
-            messages.error(
-                request,
-                "Only items that are still marked as lost can be approved.",
-            )
-            return redirect("listings:claim_detail", claim_id=claim.id)
-
-        review_time = timezone.now()
-        claim.reviewer = request.user
-        claim.reviewer_notes = reviewer_notes
-        claim.reviewed_at = review_time
-
-        if decision == ClaimReviewForm.DECISION_APPROVE:
-            claim.status = Claim.Status.APPROVED
-            claim.save()
-
-            item = claim.item
-            item.status = Item.Status.CLAIMED
-            item.claimed_by = claim.claimant
-            item.save()
-
-            Claim.objects.filter(item=item, status=Claim.Status.PENDING).exclude(pk=claim.pk).update(
-                status=Claim.Status.REJECTED,
-                reviewer_id=request.user.pk,
-                reviewer_notes="Closed automatically because another claim for this item was approved.",
-                reviewed_at=review_time,
-                updated_at=review_time,
-            )
-            messages.success(request, "Claim approved. The item is now marked as claimed.")
-        else:
-            claim.status = Claim.Status.REJECTED
-            claim.save()
-            messages.success(request, "Claim rejected.")
+    if decision == ClaimReviewForm.DECISION_APPROVE:
+        messages.success(request, "Claim approved. The item is now marked as claimed.")
+    else:
+        messages.success(request, "Claim rejected.")
 
     return redirect("listings:claim_detail", claim_id=claim.id)
