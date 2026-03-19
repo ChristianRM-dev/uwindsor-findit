@@ -129,15 +129,13 @@ pip install -r requirements/prod.txt && python manage.py collectstatic --noinput
 
 - Pre-deploy:
 
-```bash
-python manage.py migrate && python manage.py seed_minimal_catalogs && python manage.py seed_message_demo
-```
-
 - Start:
 
 ```bash
-gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+./scripts/render-start.sh
 ```
+
+The start script runs migrations and demo seeds before starting Gunicorn because Render free tier does not support `preDeployCommand`.
 
 ### Demo limitations
 

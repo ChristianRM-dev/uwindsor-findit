@@ -34,6 +34,7 @@ This repo is prepared for a Render demo deployment from the `dev` branch.
   - the Postgres database `uwindsor-findit-dev-db`
 - GitHub Actions runs CI on pushes and PRs targeting `dev`.
 - Render is configured to auto-deploy only after those checks pass.
+- On the free web service plan, bootstrap happens at app start because `preDeployCommand` is not supported.
 
 After the first deploy:
 
