@@ -9,6 +9,106 @@ from apps.core.models import UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
 
 
+class ProfileViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="profile-user@uwindsor.ca",
+            email="profile-user@uwindsor.ca",
+            password="StrongPass123!",
+            first_name="Jenny",
+            last_name="Zhao",
+            student_id="123456789",
+            phone_number="519-555-1000",
+        )
+        self.other_user = User.objects.create_user(
+            username="profile-other@uwindsor.ca",
+            email="profile-other@uwindsor.ca",
+            password="StrongPass123!",
+            student_id="987654321",
+        )
+        self.url = reverse("users:profile")
+        self.dashboard_url = reverse("core:dashboard")
+
+    def test_profile_requires_authentication(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_profile_page_renders_prefilled_form_and_navigation_links(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "My Profile")
+        self.assertContains(response, self.user.email)
+        self.assertContains(response, 'name="first_name"')
+        self.assertContains(response, 'name="last_name"')
+        self.assertContains(response, 'name="student_id"')
+        self.assertContains(response, 'name="phone_number"')
+        self.assertContains(response, 'href="/auth/profile/"')
+        self.assertContains(response, "Back to dashboard")
+
+    def test_profile_post_updates_user_fields(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "first_name": "Jennifer",
+                "last_name": "Zhang",
+                "student_id": "111222333",
+                "phone_number": "+1 (519) 555-8899",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Profile updated successfully.")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Jennifer")
+        self.assertEqual(self.user.last_name, "Zhang")
+        self.assertEqual(self.user.student_id, "111222333")
+        self.assertEqual(self.user.phone_number, "+1 (519) 555-8899")
+
+    def test_profile_rejects_duplicate_student_id(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "first_name": self.user.first_name,
+                "last_name": self.user.last_name,
+                "student_id": self.other_user.student_id,
+                "phone_number": self.user.phone_number,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This student ID is already in use.")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.student_id, "123456789")
+
+    def test_profile_rejects_invalid_student_id_and_phone_number(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "first_name": self.user.first_name,
+                "last_name": self.user.last_name,
+                "student_id": "abc123",
+                "phone_number": "519-555-ABCD",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Student ID must be exactly 9 digits.")
+        self.assertContains(response, "Phone number can only contain digits, spaces, and - + ( ).")
+
+
 class AdminPanelTests(TestCase):
     def setUp(self):
         User = get_user_model()

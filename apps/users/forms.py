@@ -48,3 +48,55 @@ class RegisterForm(UserCreationForm):
         if commit:
             user.save()
         return user
+
+
+class ProfileUpdateForm(forms.ModelForm):
+    first_name = forms.CharField(
+        required=False,
+        max_length=150,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "First name"}),
+    )
+    last_name = forms.CharField(
+        required=False,
+        max_length=150,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Last name"}),
+    )
+    student_id = forms.CharField(
+        required=False,
+        max_length=9,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "9-digit student ID"}),
+    )
+    phone_number = forms.CharField(
+        required=False,
+        max_length=20,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Phone number"}),
+    )
+
+    class Meta:
+        model = get_user_model()
+        fields = ("first_name", "last_name", "student_id", "phone_number")
+
+    def clean_student_id(self):
+        student_id = (self.cleaned_data.get("student_id") or "").strip()
+        if not student_id:
+            return ""
+
+        if not student_id.isdigit() or len(student_id) != 9:
+            raise forms.ValidationError("Student ID must be exactly 9 digits.")
+
+        User = get_user_model()
+        if User.objects.exclude(pk=self.instance.pk).filter(student_id=student_id).exists():
+            raise forms.ValidationError("This student ID is already in use.")
+
+        return student_id
+
+    def clean_phone_number(self):
+        phone_number = (self.cleaned_data.get("phone_number") or "").strip()
+        if not phone_number:
+            return ""
+
+        allowed_chars = set("0123456789-+() ")
+        if any(char not in allowed_chars for char in phone_number):
+            raise forms.ValidationError("Phone number can only contain digits, spaces, and - + ( ).")
+
+        return phone_number

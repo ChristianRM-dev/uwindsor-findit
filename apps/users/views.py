@@ -1,13 +1,15 @@
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods, require_POST
 from django.core.signing import BadSignature, SignatureExpired
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 
-from .forms import RegisterForm
+from .forms import ProfileUpdateForm, RegisterForm
 from .services.registration import create_user_from_register_form, handle_post_registration
 from .services.email_verification import unsign_verification_token
 
@@ -115,3 +117,28 @@ def verify_email_view(request: HttpRequest, token: str) -> HttpResponse:
     user.save(update_fields=["is_active"])
     messages.success(request, "Email verified successfully. You can now login.")
     return redirect("users:login")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def profile_view(request: HttpRequest) -> HttpResponse:
+    form = ProfileUpdateForm(request.POST or None, instance=request.user)
+
+    if request.method == "POST":
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Profile updated successfully.")
+            return redirect("users:profile")
+
+        messages.error(request, "Please correct the errors below.")
+
+    context = {
+        "form": form,
+        "email_address": request.user.email,
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "My Profile", "url": None, "active": True},
+        ],
+    }
+    return render(request, "users/profile.html", context)
