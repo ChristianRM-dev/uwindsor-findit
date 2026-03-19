@@ -1,11 +1,14 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
+from django.utils.dateparse import parse_date
 
 from apps.core.models import UserActivity
 from apps.core.services import track_activity
@@ -19,6 +22,15 @@ from apps.listings.forms import (
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item
 from apps.listings.models import ItemImage
 from apps.listings.services import ClaimReviewError, review_claim
+
+SEARCH_SORT_OPTIONS = (
+    ("relevance", "Most relevant"),
+    ("newest", "Newest first"),
+    ("oldest", "Oldest first"),
+    ("event_date_desc", "Most recent event date"),
+    ("event_date_asc", "Oldest event date"),
+)
+SEARCH_SORT_LABELS = dict(SEARCH_SORT_OPTIONS)
 
 def _build_claim_proof_entries(proofs):
     image_extensions = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
@@ -147,12 +159,144 @@ def _build_claim_detail_context(request, claim: Claim, *, review_form=None):
     }
 
 
+def _search_url_for_params(**params) -> str:
+    cleaned_params = {
+        key: value
+        for key, value in params.items()
+        if value not in ("", None)
+    }
+    base_url = reverse("listings:search_results")
+    if not cleaned_params:
+        return base_url
+    return f"{base_url}?{urlencode(cleaned_params)}"
+
+
+def _build_search_relevance_score(query: str):
+    return (
+        Case(
+            When(title__iexact=query, then=Value(120)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(title__istartswith=query, then=Value(90)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(title__icontains=query, then=Value(60)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(description__icontains=query, then=Value(25)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(category__name__icontains=query, then=Value(15)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(location__name__icontains=query, then=Value(10)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+    )
+
+
+def _build_search_suggestions(query: str):
+    search_term = query.strip()
+    if not search_term:
+        return []
+
+    suggestions = []
+    seen = set()
+
+    title_matches = (
+        Item.objects.filter(is_visible=True, title__icontains=search_term)
+        .order_by("-created_at")
+        .select_related("category")
+    )
+    for item in title_matches:
+        key = ("title", item.title.lower())
+        if key in seen:
+            continue
+        suggestions.append(
+            {
+                "label": item.title,
+                "hint": "Matching item title",
+                "url": _search_url_for_params(q=item.title, sort="relevance"),
+            }
+        )
+        seen.add(key)
+        if len(suggestions) >= 3:
+            break
+
+    category_matches = Category.objects.filter(is_active=True, name__icontains=search_term).order_by("name")[:2]
+    for category in category_matches:
+        key = ("category", category.slug)
+        if key in seen:
+            continue
+        suggestions.append(
+            {
+                "label": category.name,
+                "hint": "Filter by category",
+                "url": _search_url_for_params(category=category.slug, sort="newest"),
+            }
+        )
+        seen.add(key)
+
+    location_matches = CampusLocation.objects.filter(is_active=True, name__icontains=search_term).order_by("name")[:2]
+    for location in location_matches:
+        key = ("location", location.code)
+        if key in seen:
+            continue
+        suggestions.append(
+            {
+                "label": location.name,
+                "hint": "Filter by location",
+                "url": _search_url_for_params(location=location.code, sort="newest"),
+            }
+        )
+        seen.add(key)
+
+    return suggestions[:6]
+
+
+def _get_trending_categories():
+    return (
+        Category.objects.filter(is_active=True, items__is_visible=True)
+        .annotate(
+            visible_item_count=Count(
+                "items",
+                filter=Q(items__is_visible=True),
+                distinct=True,
+            )
+        )
+        .filter(visible_item_count__gt=0)
+        .order_by("-visible_item_count", "name")[:5]
+    )
+
+
 def search_results_view(request):
     q = (request.GET.get("q") or "").strip()
     category_slug = (request.GET.get("category") or "").strip()
     location_code = (request.GET.get("location") or "").strip()
     status = (request.GET.get("status") or "").strip()
-    sort = (request.GET.get("sort") or "newest").strip()
+    requested_sort = (request.GET.get("sort") or "newest").strip()
+    date_from_raw = (request.GET.get("date_from") or "").strip()
+    date_to_raw = (request.GET.get("date_to") or "").strip()
+    date_from = parse_date(date_from_raw) if date_from_raw else None
+    date_to = parse_date(date_to_raw) if date_to_raw else None
+    selected_category = Category.objects.filter(is_active=True, slug=category_slug).first() if category_slug else None
+    selected_location = CampusLocation.objects.filter(is_active=True, code=location_code).first() if location_code else None
+    sort = requested_sort if requested_sort in SEARCH_SORT_LABELS else "newest"
+    if sort == "event_date":
+        sort = "event_date_desc"
+    if sort == "relevance" and not q:
+        sort = "newest"
 
     items_qs = (
         Item.objects.filter(is_visible=True)
@@ -170,11 +314,21 @@ def search_results_view(request):
         items_qs = items_qs.filter(location__code=location_code)
     if status:
         items_qs = items_qs.filter(status=status)
+    if date_from:
+        items_qs = items_qs.filter(event_date__date__gte=date_from)
+    if date_to:
+        items_qs = items_qs.filter(event_date__date__lte=date_to)
 
-    if sort == "oldest":
+    if sort == "relevance":
+        items_qs = items_qs.annotate(
+            relevance_score=_build_search_relevance_score(q)
+        ).order_by("-relevance_score", "-event_date", "-created_at")
+    elif sort == "oldest":
         items_qs = items_qs.order_by("created_at")
-    elif sort == "event_date":
+    elif sort == "event_date_desc":
         items_qs = items_qs.order_by("-event_date")
+    elif sort == "event_date_asc":
+        items_qs = items_qs.order_by("event_date")
     else:
         items_qs = items_qs.order_by("-created_at")
 
@@ -185,17 +339,46 @@ def search_results_view(request):
     if q:
         query_chips.append({"label": "q", "value": q})
     if category_slug:
-        query_chips.append({"label": "category", "value": category_slug})
+        query_chips.append({"label": "category", "value": selected_category.name if selected_category else category_slug})
     if location_code:
-        query_chips.append({"label": "location", "value": location_code})
+        query_chips.append({"label": "location", "value": selected_location.name if selected_location else location_code})
     if status:
         query_chips.append({"label": "status", "value": status})
+    if date_from_raw:
+        query_chips.append({"label": "from", "value": date_from_raw})
+    if date_to_raw:
+        query_chips.append({"label": "to", "value": date_to_raw})
+    if sort != "newest":
+        query_chips.append({"label": "sort", "value": SEARCH_SORT_LABELS.get(sort, sort)})
+
+    search_suggestions = _build_search_suggestions(q)
+    pagination_query = urlencode(
+        {
+            key: value
+            for key, value in {
+                "q": q,
+                "category": category_slug,
+                "location": location_code,
+                "status": status,
+                "sort": sort,
+                "date_from": date_from_raw,
+                "date_to": date_to_raw,
+            }.items()
+            if value not in ("", None)
+        }
+    )
 
     context = {
         "page_obj": page_obj,
         "items": page_obj.object_list,
         "categories": Category.objects.filter(is_active=True),
         "locations": CampusLocation.objects.filter(is_active=True),
+        "trending_categories": _get_trending_categories(),
+        "search_suggestions": search_suggestions,
+        "search_hint_values": [suggestion["label"] for suggestion in search_suggestions],
+        "sort_options": SEARCH_SORT_OPTIONS,
+        "active_sort_label": SEARCH_SORT_LABELS.get(sort, "Newest first"),
+        "pagination_query": pagination_query,
         "query_chips": query_chips,
         "filters": {
             "q": q,
@@ -203,6 +386,8 @@ def search_results_view(request):
             "location": location_code,
             "status": status,
             "sort": sort,
+            "date_from": date_from_raw,
+            "date_to": date_to_raw,
         },
         "result_count": paginator.count,
     }
@@ -213,6 +398,8 @@ def search_results_view(request):
             category_slug,
             location_code,
             status,
+            date_from_raw,
+            date_to_raw,
             sort != "newest",
             request.GET.get("page"),
         ]
@@ -223,10 +410,14 @@ def search_results_view(request):
             UserActivity.ActivityType.SEARCH,
             search_query=q,
             metadata={
-                "category": category_slug,
-                "location": location_code,
+                "category": selected_category.name if selected_category else "",
+                "category_slug": category_slug,
+                "location": selected_location.name if selected_location else "",
+                "location_code": location_code,
                 "status": status,
                 "sort": sort,
+                "date_from": date_from_raw,
+                "date_to": date_to_raw,
                 "result_count": paginator.count,
             },
         )

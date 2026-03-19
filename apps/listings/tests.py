@@ -338,7 +338,7 @@ class SearchAndItemActivityTests(TestCase):
                 user=self.user,
                 activity_type=UserActivity.ActivityType.SEARCH,
                 search_query="wallet",
-                metadata__category=self.category.slug,
+                metadata__category_slug=self.category.slug,
                 metadata__status=Item.Status.LOST,
             ).exists()
         )
@@ -356,6 +356,118 @@ class SearchAndItemActivityTests(TestCase):
                 item=self.item,
             ).exists()
         )
+
+
+class SearchResultsEnhancementTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(
+            username="search-owner@uwindsor.ca",
+            email="search-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.category_wallets = Category.objects.create(name="Wallets", slug="wallets", is_active=True)
+        self.category_keys = Category.objects.create(name="Keys", slug="keys-search", is_active=True)
+        self.location_library = CampusLocation.objects.create(name="Search Library", code="search-library", is_active=True)
+        self.location_caw = CampusLocation.objects.create(name="CAW Centre", code="caw-centre", is_active=True)
+        self.url = reverse("listings:search_results")
+
+        self.title_match = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Wallet with student card",
+            description="Black leather wallet.",
+            category=self.category_wallets,
+            location=self.location_library,
+            event_date=timezone.now() - timedelta(days=2),
+            is_visible=True,
+        )
+        self.description_match = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Leather accessory pouch",
+            description="Contains wallet receipts and notes.",
+            category=self.category_wallets,
+            location=self.location_caw,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.old_item = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
+            title="Old key ring",
+            description="Found last month.",
+            category=self.category_keys,
+            location=self.location_caw,
+            event_date=timezone.now() - timedelta(days=30),
+            is_visible=True,
+        )
+
+    def test_search_results_render_enhanced_filters_trending_and_suggestions(self):
+        response = self.client.get(self.url, {"q": "search"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="date_from"')
+        self.assertContains(response, 'name="date_to"')
+        self.assertContains(response, "Most relevant")
+        self.assertContains(response, "Trending categories")
+        self.assertContains(response, "Suggestions")
+        self.assertContains(response, self.location_library.name)
+
+    def test_search_results_filter_by_date_range(self):
+        response = self.client.get(
+            self.url,
+            {
+                "date_from": (timezone.now() - timedelta(days=3)).date().isoformat(),
+                "date_to": (timezone.now() - timedelta(days=1)).date().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.title_match.title)
+        self.assertContains(response, self.description_match.title)
+        self.assertNotContains(response, self.old_item.title)
+
+    def test_relevance_sort_prioritizes_title_match(self):
+        response = self.client.get(self.url, {"q": "wallet", "sort": "relevance"})
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertLess(
+            content.index(self.title_match.title),
+            content.index(self.description_match.title),
+        )
+
+    def test_pagination_preserves_new_search_parameters(self):
+        for index in range(13):
+            Item.objects.create(
+                reporter=self.owner,
+                item_type=Item.ItemType.LOST,
+                status=Item.Status.LOST,
+                title=f"Extra search item {index}",
+                description="Extra search fixture",
+                category=self.category_wallets,
+                location=self.location_library,
+                event_date=timezone.now() - timedelta(days=index + 4),
+                is_visible=True,
+            )
+
+        response = self.client.get(
+            self.url,
+            {
+                "q": "item",
+                "sort": "event_date_desc",
+                "date_from": (timezone.now() - timedelta(days=20)).date().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Page 1 of")
+        self.assertContains(response, "sort=event_date_desc")
+        self.assertContains(response, "date_from=")
 
 
 class ClaimCreateViewTests(TestCase):
