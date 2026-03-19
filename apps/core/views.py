@@ -1,12 +1,15 @@
-from django.contrib.auth.decorators import login_required
 from datetime import datetime
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
-from django.urls import reverse
 from types import SimpleNamespace
 
-from apps.core.models import UserActivity
-from apps.core.services import track_activity
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.views.decorators.http import require_POST
+
+from apps.core.models import Notification, UserActivity
+from apps.core.services import mark_all_notifications_as_read, track_activity
 from apps.listings.models import Claim, Item
 
 def home_view(request: HttpRequest) -> HttpResponse:
@@ -118,6 +121,40 @@ def contact_view(request: HttpRequest) -> HttpResponse:
         ],
     }
     return render(request, "core/contact.html", context)
+
+
+@login_required
+def notifications_view(request: HttpRequest) -> HttpResponse:
+    notifications = (
+        Notification.objects.filter(recipient=request.user)
+        .select_related("item", "claim")
+        .order_by("-created_at")
+    )
+    context = {
+        "notifications": notifications,
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "Notifications", "url": None, "active": True},
+        ],
+    }
+    track_activity(
+        request,
+        UserActivity.ActivityType.PAGE_VIEW,
+        metadata={"page": "notifications"},
+    )
+    return render(request, "core/notifications.html", context)
+
+
+@login_required
+@require_POST
+def notifications_mark_all_read_view(request: HttpRequest) -> HttpResponse:
+    updated_count = mark_all_notifications_as_read(user=request.user)
+    if updated_count:
+        messages.success(request, f"Marked {updated_count} notification(s) as read.")
+    else:
+        messages.info(request, "No unread notifications right now.")
+    return redirect("core:notifications")
 
 
 def custom_404_view(request, exception):

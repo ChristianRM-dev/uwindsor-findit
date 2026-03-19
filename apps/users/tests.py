@@ -1,11 +1,12 @@
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core import mail
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.chat.models import Conversation, Message
-from apps.core.models import UserActivity
+from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
 
 
@@ -177,6 +178,7 @@ class AdminPanelTests(TestCase):
         self.assertContains(index_response, "FindIt Administration")
         self.assertContains(index_response, "Listings")
         self.assertContains(index_response, "Chat")
+        self.assertContains(index_response, "Core")
         self.assertContains(index_response, "Users")
 
         user_response = self.client.get(reverse("admin:users_user_changelist"))
@@ -199,6 +201,7 @@ class AdminPanelTests(TestCase):
         self.assertEqual(message_response.status_code, 200)
         self.assertContains(message_response, self.message.content)
 
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_claim_admin_approve_action_reviews_claim_and_closes_others(self):
         response = self.client.post(
             reverse("admin:listings_claim_changelist"),
@@ -224,6 +227,21 @@ class AdminPanelTests(TestCase):
         self.assertEqual(self.secondary_claim.status, Claim.Status.REJECTED)
         self.assertEqual(self.secondary_claim.reviewer, self.admin_user)
         self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.claimant_1,
+                claim=self.pending_claim,
+                notification_type=Notification.NotificationType.CLAIM_APPROVED,
+            ).exists()
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.claimant_2,
+                claim=self.secondary_claim,
+                notification_type=Notification.NotificationType.CLAIM_REJECTED,
+            ).exists()
+        )
+        self.assertEqual(len(mail.outbox), 2)
+        self.assertTrue(
             UserActivity.objects.filter(
                 user=self.admin_user,
                 activity_type=UserActivity.ActivityType.CLAIM_REVIEW,
@@ -234,6 +252,7 @@ class AdminPanelTests(TestCase):
             ).exists()
         )
 
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
     def test_claim_admin_reject_action_reviews_claim(self):
         response = self.client.post(
             reverse("admin:listings_claim_changelist"),
@@ -255,6 +274,14 @@ class AdminPanelTests(TestCase):
         self.assertEqual(self.pending_claim.reviewer_notes, "Rejected in Django admin.")
         self.assertEqual(self.item.status, Item.Status.LOST)
         self.assertIsNone(self.item.claimed_by)
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.claimant_1,
+                claim=self.pending_claim,
+                notification_type=Notification.NotificationType.CLAIM_REJECTED,
+            ).exists()
+        )
+        self.assertEqual(len(mail.outbox), 1)
         self.assertTrue(
             UserActivity.objects.filter(
                 user=self.admin_user,

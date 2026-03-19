@@ -1,10 +1,11 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
 
-from apps.core.models import UserActivity
+from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
 
 
@@ -132,6 +133,107 @@ class HomePublicNavbarTests(TestCase):
         )
 
 
+class NotificationViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="notifications@uwindsor.ca",
+            email="notifications@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="notifications-other@uwindsor.ca",
+            email="notifications-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.category = Category.objects.create(name="Notifications", slug="notifications", is_active=True)
+        self.location = CampusLocation.objects.create(name="Chrysler", code="chrysler", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.other_user,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Orange USB Drive",
+            description="Notification fixture item",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.user,
+            description="Notification fixture claim",
+            status=Claim.Status.PENDING,
+        )
+        self.unread_notification = Notification.objects.create(
+            recipient=self.user,
+            notification_type=Notification.NotificationType.CLAIM_APPROVED,
+            title="Claim approved for Orange USB Drive",
+            body="Your claim was approved.",
+            link_path=reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}),
+            item=self.item,
+            claim=self.claim,
+        )
+        self.read_notification = Notification.objects.create(
+            recipient=self.user,
+            notification_type=Notification.NotificationType.CLAIM_SUBMITTED,
+            title="Claim submitted for Orange USB Drive",
+            body="A claim was submitted.",
+            is_read=True,
+            read_at=timezone.now(),
+            item=self.item,
+            claim=self.claim,
+        )
+        self.url = reverse("core:notifications")
+        self.mark_all_url = reverse("core:notifications_mark_all_read")
+
+    def test_notifications_requires_authentication(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_notifications_page_renders_entries_and_navigation(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Notifications")
+        self.assertContains(response, self.unread_notification.title)
+        self.assertContains(response, self.read_notification.title)
+        self.assertContains(response, 'aria-label="Notifications"')
+        self.assertContains(response, reverse("core:notifications_mark_all_read"))
+        self.assertContains(response, reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}))
+        self.assertContains(response, "Unread")
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.PAGE_VIEW,
+                page_path=self.url,
+            ).exists()
+        )
+
+    def test_mark_all_read_updates_only_current_users_notifications(self):
+        other_notification = Notification.objects.create(
+            recipient=self.other_user,
+            notification_type=Notification.NotificationType.CLAIM_REJECTED,
+            title="Other notification",
+            body="Other body",
+        )
+
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.post(self.mark_all_url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Marked 1 notification(s) as read.")
+        self.unread_notification.refresh_from_db()
+        other_notification.refresh_from_db()
+        self.assertTrue(self.unread_notification.is_read)
+        self.assertIsNotNone(self.unread_notification.read_at)
+        self.assertFalse(other_notification.is_read)
+
+
 class HomeLandingContentTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -222,3 +324,17 @@ class StaticPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Contact")
         self.assertContains(response, "support@findit.local")
+
+
+class SecuritySettingsTests(TestCase):
+    def test_security_settings_are_enabled(self):
+        self.assertGreater(settings.SESSION_COOKIE_AGE, 0)
+        self.assertTrue(settings.SESSION_SAVE_EVERY_REQUEST)
+        self.assertTrue(settings.SESSION_EXPIRE_AT_BROWSER_CLOSE)
+        self.assertTrue(settings.SESSION_COOKIE_HTTPONLY)
+        self.assertEqual(settings.SESSION_COOKIE_SAMESITE, "Lax")
+        self.assertTrue(settings.CSRF_COOKIE_HTTPONLY)
+        self.assertEqual(settings.CSRF_COOKIE_SAMESITE, "Lax")
+        self.assertTrue(settings.SECURE_CONTENT_TYPE_NOSNIFF)
+        self.assertEqual(settings.X_FRAME_OPTIONS, "DENY")
+        self.assertEqual(settings.SECURE_REFERRER_POLICY, "same-origin")

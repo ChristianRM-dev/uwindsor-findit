@@ -109,3 +109,48 @@ class UserActivity(models.Model):
             return f"Item #{self.item_id}"
 
         return self.page_path
+
+
+class Notification(models.Model):
+    class NotificationType(models.TextChoices):
+        CLAIM_SUBMITTED = "CLAIM_SUBMITTED", "Claim submitted"
+        CLAIM_APPROVED = "CLAIM_APPROVED", "Claim approved"
+        CLAIM_REJECTED = "CLAIM_REJECTED", "Claim rejected"
+
+    recipient = models.ForeignKey(
+        "users.User",
+        on_delete=models.CASCADE,
+        related_name="notifications",
+    )
+    notification_type = models.CharField(max_length=32, choices=NotificationType.choices)
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    link_path = models.CharField(max_length=255, blank=True)
+    item = models.ForeignKey(
+        "listings.Item",
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+    claim = models.ForeignKey(
+        "listings.Claim",
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True,
+    )
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    email_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["recipient", "is_read", "created_at"]),
+            models.Index(fields=["notification_type", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.notification_type} -> {self.recipient}"

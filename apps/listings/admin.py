@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 
 from apps.core.models import UserActivity
-from apps.core.services import track_activity
+from apps.core.services import notify_claim_reviewed, track_activity
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
 from apps.listings.services import ClaimReviewError, review_claim
 
@@ -132,12 +132,15 @@ class ClaimAdmin(admin.ModelAdmin):
 
         for claim in queryset.select_related("item", "claimant").order_by("item_id", "created_at"):
             try:
-                review_claim(
+                review_result = review_claim(
                     claim=claim,
                     reviewer=request.user,
                     decision="approve",
                     reviewer_notes="Approved in Django admin.",
                 )
+                notify_claim_reviewed(claim=review_result.claim)
+                for auto_rejected_claim in review_result.auto_rejected_claims:
+                    notify_claim_reviewed(claim=auto_rejected_claim, auto_closed=True)
                 track_activity(
                     request,
                     UserActivity.ActivityType.CLAIM_REVIEW,
@@ -170,12 +173,13 @@ class ClaimAdmin(admin.ModelAdmin):
 
         for claim in queryset.select_related("item", "claimant").order_by("item_id", "created_at"):
             try:
-                review_claim(
+                review_result = review_claim(
                     claim=claim,
                     reviewer=request.user,
                     decision="reject",
                     reviewer_notes="Rejected in Django admin.",
                 )
+                notify_claim_reviewed(claim=review_result.claim)
                 track_activity(
                     request,
                     UserActivity.ActivityType.CLAIM_REVIEW,

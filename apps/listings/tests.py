@@ -8,12 +8,13 @@ from datetime import timedelta
 
 from PIL import Image
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.core.models import UserActivity
+from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
 
 
@@ -585,6 +586,35 @@ class ClaimCreateViewTests(TestCase):
                 metadata__claim_id=created_claim.id,
             ).exists()
         )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_valid_post_creates_owner_notification_and_email(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "full_name": "Avery Jones",
+            "email": "claimant@uwindsor.ca",
+            "relationship_to_item": "Owner",
+            "detailed_description": "Wallet has a blue stripe and two student cards.",
+            "where_lost_location": str(self.location.pk),
+            "consent": "on",
+            "proof_files": [self._valid_image_file()],
+        }
+
+        response = self.client.post(self.url, data=payload, format="multipart")
+
+        self.assertEqual(response.status_code, 302)
+        created_claim = Claim.objects.get()
+        notification = Notification.objects.get(
+            recipient=self.reporter,
+            claim=created_claim,
+            notification_type=Notification.NotificationType.CLAIM_SUBMITTED,
+        )
+        self.assertIn(self.item.title, notification.title)
+        self.assertEqual(notification.link_path, reverse("listings:claim_detail", kwargs={"claim_id": created_claim.pk}))
+        self.assertTrue(notification.email_sent)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(self.item.title, mail.outbox[0].subject)
 
     def test_invalid_post_shows_top_alert_and_field_errors(self):
         self.client.login(username=self.user.username, password="StrongPass123!")
@@ -1178,6 +1208,34 @@ class ClaimReviewViewTests(TestCase):
             ).exists()
         )
 
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_approve_notifies_primary_and_auto_rejected_claimants(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Proof matches the serial details on the wallet.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        approved_notification = Notification.objects.get(
+            recipient=self.claimant_1,
+            claim=self.claim,
+            notification_type=Notification.NotificationType.CLAIM_APPROVED,
+        )
+        rejected_notification = Notification.objects.get(
+            recipient=self.claimant_2,
+            claim=self.other_pending_claim,
+            notification_type=Notification.NotificationType.CLAIM_REJECTED,
+        )
+        self.assertIn("approved", approved_notification.title.lower())
+        self.assertIn("another claim", rejected_notification.body.lower())
+        self.assertEqual(len(mail.outbox), 2)
+
+
     def test_reporter_can_reject_claim_with_notes(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")
 
@@ -1206,6 +1264,28 @@ class ClaimReviewViewTests(TestCase):
                 metadata__decision="reject",
             ).exists()
         )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_reject_notifies_claimant(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "reject",
+                "reviewer_notes": "The identifying details do not match the item report.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        notification = Notification.objects.get(
+            recipient=self.claimant_1,
+            claim=self.claim,
+            notification_type=Notification.NotificationType.CLAIM_REJECTED,
+        )
+        self.assertIn("rejected", notification.title.lower())
+        self.assertIn("identifying details", notification.body.lower())
+        self.assertEqual(len(mail.outbox), 1)
 
     def test_reject_requires_reviewer_notes(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")

@@ -65,6 +65,17 @@
 
           {% if user.is_authenticated %}
             <li class="nav-item">
+              <a class="btn btn-outline-secondary btn-sm position-relative" href="{% url 'core:notifications' %}" aria-label="Notifications">
+                <i class="bi bi-megaphone"></i>
+                {% if unread_notification_count %}
+                  <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill text-bg-danger">
+                    {% if unread_notification_count > 99 %}99+{% else %}{{ unread_notification_count }}{% endif %}
+                  </span>
+                {% endif %}
+              </a>
+            </li>
+
+            <li class="nav-item">
               <a class="btn btn-outline-secondary btn-sm position-relative" href="{% url 'chat:message_list' %}" aria-label="Messages">
                 <i class="bi bi-bell"></i>
                 {% if unread_message_count %}

@@ -11,7 +11,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.dateparse import parse_date
 
 from apps.core.models import UserActivity
-from apps.core.services import track_activity
+from apps.core.services import notify_claim_reviewed, notify_claim_submitted, track_activity
 from apps.listings.forms import (
     ClaimCreateForm,
     ClaimReviewForm,
@@ -596,6 +596,8 @@ def claim_create_view(request, item_id: int):
                             file=uploaded_file,
                         )
 
+                notify_claim_submitted(claim=claim)
+
                 track_activity(
                     request,
                     UserActivity.ActivityType.CLAIM_SUBMISSION,
@@ -926,7 +928,7 @@ def claim_review_view(request, claim_id: int):
     reviewer_notes = review_form.cleaned_data["reviewer_notes"]
 
     try:
-        review_claim(
+        review_result = review_claim(
             claim=claim,
             reviewer=request.user,
             decision=decision,
@@ -935,6 +937,10 @@ def claim_review_view(request, claim_id: int):
     except ClaimReviewError as exc:
         messages.error(request, str(exc))
         return redirect("listings:claim_detail", claim_id=claim.id)
+
+    notify_claim_reviewed(claim=review_result.claim)
+    for auto_rejected_claim in review_result.auto_rejected_claims:
+        notify_claim_reviewed(claim=auto_rejected_claim, auto_closed=True)
 
     track_activity(
         request,

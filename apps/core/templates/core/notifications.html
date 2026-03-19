@@ -1,0 +1,54 @@
+{% extends "layouts/private_base.html" %}
+
+{% block title %}Notifications | FindIt{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <div class="d-flex align-items-start align-items-md-center justify-content-between gap-3 flex-column flex-md-row mb-4">
+      <div>
+        <h1 class="h4 mb-1">Notifications</h1>
+        <div class="text-muted small">Stay up to date on claim activity and account updates.</div>
+      </div>
+      <form method="post" action="{% url 'core:notifications_mark_all_read' %}">
+        {% csrf_token %}
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Mark All as Read</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="card-body p-0">
+        {% if notifications %}
+          <div class="list-group list-group-flush">
+            {% for notification in notifications %}
+              <div class="list-group-item py-3 {% if not notification.is_read %}bg-light{% endif %}">
+                <div class="d-flex justify-content-between gap-3 flex-wrap">
+                  <div class="me-auto">
+                    <div class="d-flex align-items-center gap-2 flex-wrap mb-1">
+                      <h2 class="h6 mb-0">{{ notification.title }}</h2>
+                      {% if not notification.is_read %}
+                        <span class="badge text-bg-primary">Unread</span>
+                      {% endif %}
+                    </div>
+                    <p class="small text-muted mb-2">{{ notification.body }}</p>
+                    {% if notification.link_path %}
+                      <a class="small text-decoration-none" href="{{ notification.link_path }}">Open related page</a>
+                    {% endif %}
+                  </div>
+                  <div class="small text-muted">{{ notification.created_at|date:"M d, Y g:i A" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="p-4">
+            <p class="text-muted mb-0">No notifications yet. Claim updates and account alerts will appear here.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
