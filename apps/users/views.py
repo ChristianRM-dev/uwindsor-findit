@@ -12,6 +12,12 @@ from django.urls import reverse
 from .forms import ProfileUpdateForm, RegisterForm
 from .services.registration import create_user_from_register_form, handle_post_registration
 from .services.email_verification import unsign_verification_token
+from .services.login_security import (
+    clear_failed_login,
+    format_lockout_message,
+    get_lockout_remaining_seconds,
+    record_failed_login,
+)
 
 
 @require_http_methods(["GET", "POST"])
@@ -53,18 +59,35 @@ def login_view(request: HttpRequest) -> HttpResponse:
     form = AuthenticationForm(request, data=request.POST or None)
 
     if request.method == "POST":
+        identifier = (request.POST.get("username") or "").strip().lower()
+        remaining_lockout = get_lockout_remaining_seconds(request=request, identifier=identifier)
+        if remaining_lockout:
+            messages.error(request, format_lockout_message(remaining_lockout))
+            return render(request, "users/login.html", {"form": form})
+
         if form.is_valid():
             user = form.get_user()
-
-            if not user.is_active:
-                messages.error(request, "Your account is not active. Please verify your email first.")
-                return render(request, "users/login.html", {"form": form})
-
+            clear_failed_login(request=request, identifier=identifier)
             login(request, user)
             messages.success(request, "Welcome back!")
             return redirect("core:dashboard")
 
-        messages.error(request, "Invalid credentials. Please try again.")
+        User = get_user_model()
+        inactive_user = (
+            User.objects.filter(username__iexact=identifier).first()
+            or User.objects.filter(email__iexact=identifier).first()
+        )
+        raw_password = request.POST.get("password") or ""
+
+        if inactive_user and not inactive_user.is_active and inactive_user.check_password(raw_password):
+            messages.error(request, "Your account is not active. Please verify your email first.")
+            return render(request, "users/login.html", {"form": form})
+
+        remaining_after_failure = record_failed_login(request=request, identifier=identifier)
+        if remaining_after_failure:
+            messages.error(request, format_lockout_message(remaining_after_failure))
+        else:
+            messages.error(request, "Invalid credentials. Please try again.")
 
     return render(request, "users/login.html", {"form": form})
 

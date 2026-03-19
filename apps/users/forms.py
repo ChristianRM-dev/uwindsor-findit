@@ -9,6 +9,26 @@ class RegisterForm(UserCreationForm):
         widget=forms.EmailInput(attrs={"class": "form-control", "placeholder": "name@uwindsor.ca"}),
         help_text="Only @uwindsor.ca emails are allowed.",
     )
+    first_name = forms.CharField(
+        required=True,
+        max_length=150,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "First name"}),
+    )
+    last_name = forms.CharField(
+        required=True,
+        max_length=150,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Last name"}),
+    )
+    student_id = forms.CharField(
+        required=True,
+        max_length=9,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "9-digit student ID"}),
+    )
+    phone_number = forms.CharField(
+        required=True,
+        max_length=20,
+        widget=forms.TextInput(attrs={"class": "form-control", "placeholder": "Phone number"}),
+    )
 
     password1 = forms.CharField(
         label="Password",
@@ -21,7 +41,7 @@ class RegisterForm(UserCreationForm):
 
     class Meta(UserCreationForm.Meta):
         model = get_user_model()
-        fields = ("email",)
+        fields = ("email", "first_name", "last_name", "student_id", "phone_number")
 
     def clean_email(self):
         email = (self.cleaned_data.get("email") or "").strip().lower()
@@ -36,6 +56,38 @@ class RegisterForm(UserCreationForm):
 
         return email
 
+    def clean_first_name(self):
+        first_name = (self.cleaned_data.get("first_name") or "").strip()
+        if not first_name:
+            raise forms.ValidationError("First name is required.")
+        return first_name
+
+    def clean_last_name(self):
+        last_name = (self.cleaned_data.get("last_name") or "").strip()
+        if not last_name:
+            raise forms.ValidationError("Last name is required.")
+        return last_name
+
+    def clean_student_id(self):
+        student_id = (self.cleaned_data.get("student_id") or "").strip()
+        if not student_id.isdigit() or len(student_id) != 9:
+            raise forms.ValidationError("Student ID must be exactly 9 digits.")
+
+        User = get_user_model()
+        if User.objects.filter(student_id=student_id).exists():
+            raise forms.ValidationError("This student ID is already in use.")
+
+        return student_id
+
+    def clean_phone_number(self):
+        phone_number = (self.cleaned_data.get("phone_number") or "").strip()
+        allowed_chars = set("0123456789-+() ")
+        if not phone_number:
+            raise forms.ValidationError("Phone number is required.")
+        if any(char not in allowed_chars for char in phone_number):
+            raise forms.ValidationError("Phone number can only contain digits, spaces, and - + ( ).")
+        return phone_number
+
     def save(self, commit=True):
         user = super().save(commit=False)
         email = self.cleaned_data["email"]
@@ -43,7 +95,10 @@ class RegisterForm(UserCreationForm):
         # Minimal approach: store email in both fields so default auth works.
         user.email = email
         user.username = email  # enables login with email as username
-        user.is_active = True
+        user.first_name = self.cleaned_data["first_name"]
+        user.last_name = self.cleaned_data["last_name"]
+        user.student_id = self.cleaned_data["student_id"]
+        user.phone_number = self.cleaned_data["phone_number"]
 
         if commit:
             user.save()

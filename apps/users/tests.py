@@ -1,5 +1,6 @@
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -8,6 +9,151 @@ from django.utils import timezone
 from apps.chat.models import Conversation, Message
 from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
+from apps.users.services.email_verification import make_verification_token
+
+
+class RegistrationAndLoginViewTests(TestCase):
+    def setUp(self):
+        self.register_url = reverse("users:register")
+        self.login_url = reverse("users:login")
+        self.verify_sent_url = reverse("users:verify_email_sent")
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    @override_settings(
+        REQUIRE_EMAIL_VERIFICATION=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    def test_register_creates_inactive_user_with_profile_fields_and_sends_verification_email(self):
+        response = self.client.post(
+            self.register_url,
+            {
+                "email": "newstudent@uwindsor.ca",
+                "first_name": "Jennifer",
+                "last_name": "Zhang",
+                "student_id": "123456789",
+                "phone_number": "519-555-8899",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertRedirects(response, self.verify_sent_url)
+        user = get_user_model().objects.get(email="newstudent@uwindsor.ca")
+        self.assertFalse(user.is_active)
+        self.assertEqual(user.first_name, "Jennifer")
+        self.assertEqual(user.last_name, "Zhang")
+        self.assertEqual(user.student_id, "123456789")
+        self.assertEqual(user.phone_number, "519-555-8899")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/auth/verify-email/", mail.outbox[0].body)
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
+    def test_register_rejects_invalid_student_id_and_phone(self):
+        response = self.client.post(
+            self.register_url,
+            {
+                "email": "broken@uwindsor.ca",
+                "first_name": "Broken",
+                "last_name": "Case",
+                "student_id": "abc123",
+                "phone_number": "519-555-ABCD",
+                "password1": "StrongPass123!",
+                "password2": "StrongPass123!",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Student ID must be exactly 9 digits.")
+        self.assertContains(response, "Phone number can only contain digits, spaces, and - + ( ).")
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
+    def test_verify_email_activates_user(self):
+        user = get_user_model().objects.create_user(
+            username="verifyme@uwindsor.ca",
+            email="verifyme@uwindsor.ca",
+            password="StrongPass123!",
+            is_active=False,
+        )
+        token = make_verification_token(user.pk)
+
+        response = self.client.get(reverse("users:verify_email", kwargs={"token": token}), follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Email verified successfully. You can now login.")
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
+    def test_login_shows_verify_message_for_inactive_user(self):
+        get_user_model().objects.create_user(
+            username="inactive@uwindsor.ca",
+            email="inactive@uwindsor.ca",
+            password="StrongPass123!",
+            is_active=False,
+        )
+
+        response = self.client.post(
+            self.login_url,
+            {"username": "inactive@uwindsor.ca", "password": "StrongPass123!"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your account is not active. Please verify your email first.")
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=False, LOGIN_FAILURE_LIMIT=3, LOGIN_LOCKOUT_SECONDS=60)
+    def test_login_locks_after_repeated_invalid_attempts(self):
+        get_user_model().objects.create_user(
+            username="lockme@uwindsor.ca",
+            email="lockme@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        for _ in range(3):
+            response = self.client.post(
+                self.login_url,
+                {"username": "lockme@uwindsor.ca", "password": "WrongPass123!"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Too many login attempts.")
+
+        locked_response = self.client.post(
+            self.login_url,
+            {"username": "lockme@uwindsor.ca", "password": "StrongPass123!"},
+        )
+
+        self.assertEqual(locked_response.status_code, 200)
+        self.assertContains(locked_response, "Too many login attempts.")
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=False, LOGIN_FAILURE_LIMIT=3, LOGIN_LOCKOUT_SECONDS=60)
+    def test_successful_login_clears_failed_attempt_counter(self):
+        get_user_model().objects.create_user(
+            username="clearcounter@uwindsor.ca",
+            email="clearcounter@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        for _ in range(2):
+            self.client.post(
+                self.login_url,
+                {"username": "clearcounter@uwindsor.ca", "password": "WrongPass123!"},
+            )
+
+        success_response = self.client.post(
+            self.login_url,
+            {"username": "clearcounter@uwindsor.ca", "password": "StrongPass123!"},
+        )
+        self.assertEqual(success_response.status_code, 302)
+
+        self.client.logout()
+        failure_response = self.client.post(
+            self.login_url,
+            {"username": "clearcounter@uwindsor.ca", "password": "WrongPass123!"},
+        )
+        self.assertEqual(failure_response.status_code, 200)
+        self.assertNotContains(failure_response, "Too many login attempts.")
 
 
 class ProfileViewTests(TestCase):

@@ -16,8 +16,19 @@
   {# If you want to render Django form fields cleanly #}
   <div class="mb-3">
     <label class="form-label" for="id_username">Email</label>
-    <input type="email" name="username" class="form-control" id="id_username" placeholder="name@uwindsor.ca" required
-      autofocus />
+    <input
+      type="email"
+      name="username"
+      class="form-control {% if form.username.errors or form.non_field_errors %}is-invalid{% endif %}"
+      id="id_username"
+      placeholder="name@uwindsor.ca"
+      value="{{ form.data.username|default_if_none:'' }}"
+      required
+      autofocus
+    />
+    {% if form.username.errors %}
+      <div class="invalid-feedback d-block">{{ form.username.errors|striptags }}</div>
+    {% endif %}
   </div>
 
 
@@ -35,6 +46,9 @@
         <span class="ms-1 d-none d-sm-inline" data-role="label">Show</span>
       </button>
     </div>
+    {% if form.password.errors %}
+      <div class="invalid-feedback d-block">{{ form.password.errors|striptags }}</div>
+    {% endif %}
   </div>
 
 
