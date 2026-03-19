@@ -43,6 +43,18 @@
               <span class="badge bg-secondary">{{ claim.get_status_display }}</span>
             {% endif %}
             <p class="small text-muted mt-2 mb-0">Last updated: {{ claim.updated_at|date:"M d, Y" }}</p>
+
+            {% if claim.reviewed_at %}
+              <hr>
+              <div class="small text-muted">Reviewed by</div>
+              <div class="fw-semibold">{{ claim.reviewer.get_username|default:"Staff reviewer" }}</div>
+              <div class="small text-muted mt-2">Reviewed on</div>
+              <div class="fw-semibold">{{ claim.reviewed_at|date:"M d, Y g:i A" }}</div>
+              {% if claim.reviewer_notes %}
+                <div class="small text-muted mt-2">Reviewer notes</div>
+                <p class="small bg-light border rounded p-3 mb-0 mt-1" style="white-space: pre-line;">{{ claim.reviewer_notes }}</p>
+              {% endif %}
+            {% endif %}
           </div>
         </div>
       </div>
@@ -86,6 +98,39 @@
             <p class="small bg-light border rounded p-3 mb-0" style="white-space: pre-line;">{{ parsed_claim.claim_details }}</p>
           </div>
         </div>
+
+        {% if show_review_form %}
+          <div class="card mt-3">
+            <div class="card-header bg-white">
+              <h2 class="h6 mb-0">Review claim</h2>
+            </div>
+            <div class="card-body">
+              <p class="small text-muted">
+                Approving this claim marks the item as claimed and automatically closes other pending claims for the same item.
+              </p>
+
+              {% if review_form.non_field_errors %}
+                <div class="alert alert-danger" role="alert">{{ review_form.non_field_errors|join:", " }}</div>
+              {% endif %}
+
+              <form method="post" action="{{ review_url }}">
+                {% csrf_token %}
+                <div class="mb-3">
+                  <label for="{{ review_form.reviewer_notes.id_for_label }}" class="form-label">{{ review_form.reviewer_notes.label|default:"Reviewer notes" }}</label>
+                  {{ review_form.reviewer_notes }}
+                  <div class="form-text">Optional for approval. Required when rejecting.</div>
+                  {% if review_form.reviewer_notes.errors %}
+                    <div class="text-danger small mt-1">{{ review_form.reviewer_notes.errors|join:", " }}</div>
+                  {% endif %}
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                  <button type="submit" class="btn btn-success" name="decision" value="approve">Approve claim</button>
+                  <button type="submit" class="btn btn-outline-danger" name="decision" value="reject">Reject claim</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        {% endif %}
 
         <div class="card mt-3">
           <div class="card-header bg-white">

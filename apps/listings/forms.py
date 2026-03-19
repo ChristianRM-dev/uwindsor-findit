@@ -257,6 +257,44 @@ class ClaimCreateForm(forms.Form):
         return list(files)
 
 
+class ClaimReviewForm(forms.Form):
+    DECISION_APPROVE = "approve"
+    DECISION_REJECT = "reject"
+    DECISION_CHOICES = (
+        (DECISION_APPROVE, "Approve"),
+        (DECISION_REJECT, "Reject"),
+    )
+
+    decision = forms.ChoiceField(
+        choices=DECISION_CHOICES,
+        widget=forms.HiddenInput(),
+    )
+    reviewer_notes = forms.CharField(
+        required=False,
+        max_length=1000,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "Add any notes for the claimant. Required when rejecting.",
+            }
+        ),
+    )
+
+    def clean_reviewer_notes(self):
+        return (self.cleaned_data.get("reviewer_notes") or "").strip()
+
+    def clean(self):
+        cleaned = super().clean()
+        if (
+            cleaned.get("decision") == self.DECISION_REJECT
+            and not cleaned.get("reviewer_notes")
+        ):
+            self.add_error("reviewer_notes", "Please provide a reason when rejecting a claim.")
+
+        return cleaned
+
+
 class ItemEditForm(forms.ModelForm):
     status = forms.ChoiceField(
         required=True,

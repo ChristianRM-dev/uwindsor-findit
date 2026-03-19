@@ -94,8 +94,12 @@
                     <td>{{ claim.proofs.count }}</td>
                     <td>
                       <div class="d-flex flex-column gap-1">
-                        <a class="btn btn-primary btn-sm" href="{% url 'listings:item_detail_public' pk=claim.item.id %}">View item</a>
-                        <a class="small link-secondary" href="{% url 'listings:claim_detail' claim_id=claim.id %}">Claim details</a>
+                        {% if claim.status == "PENDING" %}
+                          <a class="btn btn-primary btn-sm" href="{% url 'listings:claim_detail' claim_id=claim.id %}">Review claim</a>
+                        {% else %}
+                          <a class="btn btn-primary btn-sm" href="{% url 'listings:claim_detail' claim_id=claim.id %}">Claim details</a>
+                        {% endif %}
+                        <a class="small link-secondary" href="{% url 'listings:item_detail_public' pk=claim.item.id %}">View item</a>
                       </div>
                     </td>
                   </tr>

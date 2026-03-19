@@ -654,6 +654,8 @@ class MyReceivedClaimsViewTests(TestCase):
         self.assertNotContains(response, self.other_item.title)
         self.assertContains(response, self.claimant_1.email)
         self.assertContains(response, self.claimant_2.email)
+        self.assertContains(response, "Review claim")
+        self.assertContains(response, "Claim details")
 
     def test_filters_status_and_search(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")
@@ -811,6 +813,7 @@ class ClaimDetailViewTests(TestCase):
         ClaimProof.objects.create(claim=self.claim, file=doc_file)
 
         self.url = reverse("listings:claim_detail", kwargs={"claim_id": self.claim.id})
+        self.review_url = reverse("listings:claim_review", kwargs={"claim_id": self.claim.id})
 
     def _valid_image_file(self, name: str = "proof.png") -> SimpleUploadedFile:
         image = Image.new("RGB", (50, 50), color=(120, 120, 120))
@@ -834,23 +837,224 @@ class ClaimDetailViewTests(TestCase):
         self.assertContains(response, "Other files")
         self.assertContains(response, "proof-image.png")
         self.assertContains(response, "proof-document.pdf")
+        self.assertNotContains(response, "Review claim")
 
     def test_reporter_can_view_detail(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.claimant.email)
+        self.assertContains(response, "Review claim")
+        self.assertContains(response, f'action="{self.review_url}"')
 
     def test_admin_can_view_detail(self):
         self.client.login(username=self.admin_user.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Claim details")
+        self.assertContains(response, "Review claim")
 
     def test_unrelated_user_gets_404(self):
         self.client.login(username=self.third_user.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)
+
+    def test_reviewed_claim_shows_reviewer_metadata(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.admin_user
+        self.claim.reviewer_notes = "Claim details match the recovered item."
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save()
+
+        self.client.login(username=self.claimant.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reviewed by")
+        self.assertContains(response, self.admin_user.username)
+        self.assertContains(response, "Claim details match the recovered item.")
+
+
+class ClaimReviewViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.reporter = User.objects.create_user(
+            username="review-owner@uwindsor.ca",
+            email="review-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant_1 = User.objects.create_user(
+            username="review-claimant-1@uwindsor.ca",
+            email="review-claimant-1@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant_2 = User.objects.create_user(
+            username="review-claimant-2@uwindsor.ca",
+            email="review-claimant-2@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="review-other@uwindsor.ca",
+            email="review-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.admin_user = User.objects.create_user(
+            username="review-admin@uwindsor.ca",
+            email="review-admin@uwindsor.ca",
+            password="StrongPass123!",
+            is_staff=True,
+        )
+
+        self.category = Category.objects.create(name="Review Docs", slug="review-docs", is_active=True)
+        self.location = CampusLocation.objects.create(name="Review Hall", code="review-hall", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Student ID Wallet",
+            description="Brown wallet with student ID",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=2),
+            is_visible=True,
+        )
+        self.claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.claimant_1,
+            description="Primary claim",
+            status=Claim.Status.PENDING,
+        )
+        self.other_pending_claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.claimant_2,
+            description="Backup claim",
+            status=Claim.Status.PENDING,
+        )
+
+        self.url = reverse("listings:claim_review", kwargs={"claim_id": self.claim.id})
+        self.detail_url = reverse("listings:claim_detail", kwargs={"claim_id": self.claim.id})
+
+    def test_redirects_guest_to_login(self):
+        response = self.client.post(self.url, {"decision": "approve"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_reporter_can_approve_claim_and_close_other_pending_claims(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Proof matches the serial details on the wallet.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        self.claim.refresh_from_db()
+        self.other_pending_claim.refresh_from_db()
+        self.item.refresh_from_db()
+
+        self.assertEqual(self.claim.status, Claim.Status.APPROVED)
+        self.assertEqual(self.claim.reviewer, self.reporter)
+        self.assertEqual(self.claim.reviewer_notes, "Proof matches the serial details on the wallet.")
+        self.assertIsNotNone(self.claim.reviewed_at)
+        self.assertEqual(self.item.status, Item.Status.CLAIMED)
+        self.assertEqual(self.item.claimed_by, self.claimant_1)
+        self.assertEqual(self.other_pending_claim.status, Claim.Status.REJECTED)
+        self.assertEqual(self.other_pending_claim.reviewer, self.reporter)
+        self.assertIn("another claim for this item was approved", self.other_pending_claim.reviewer_notes.lower())
+
+    def test_reporter_can_reject_claim_with_notes(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "reject",
+                "reviewer_notes": "The identifying details do not match the item report.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        self.claim.refresh_from_db()
+        self.item.refresh_from_db()
+
+        self.assertEqual(self.claim.status, Claim.Status.REJECTED)
+        self.assertEqual(self.claim.reviewer, self.reporter)
+        self.assertEqual(self.item.status, Item.Status.LOST)
+        self.assertIsNone(self.item.claimed_by)
+
+    def test_reject_requires_reviewer_notes(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, {"decision": "reject"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Please provide a reason when rejecting a claim.")
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.PENDING)
+
+    def test_claimant_cannot_review_claim(self):
+        self.client.login(username=self.claimant_1.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, {"decision": "approve"})
+
+        self.assertEqual(response.status_code, 404)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.PENDING)
+
+    def test_admin_can_review_claim(self):
+        self.client.login(username=self.admin_user.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Approved by admin review.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        self.claim.refresh_from_db()
+        self.item.refresh_from_db()
+
+        self.assertEqual(self.claim.status, Claim.Status.APPROVED)
+        self.assertEqual(self.claim.reviewer, self.admin_user)
+        self.assertEqual(self.item.claimed_by, self.claimant_1)
+
+    def test_already_reviewed_claim_cannot_be_reviewed_twice(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.reporter
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save()
+
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.post(self.url, {"decision": "reject"}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This claim has already been reviewed.")
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.APPROVED)
+
+    def test_cannot_approve_claim_when_item_is_no_longer_lost(self):
+        self.item.status = Item.Status.RETURNED
+        self.item.save(update_fields=["status"])
+
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Trying to approve after item status changed.",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Only items that are still marked as lost can be approved.")
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.PENDING)
 
 
 class ItemEditViewTests(TestCase):

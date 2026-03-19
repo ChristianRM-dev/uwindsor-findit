@@ -6,8 +6,15 @@ from django.db.models import Count, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
+from django.utils import timezone
 
-from apps.listings.forms import ClaimCreateForm, ReportFoundItemForm, ReportLostItemForm, ItemEditForm
+from apps.listings.forms import (
+    ClaimCreateForm,
+    ClaimReviewForm,
+    ItemEditForm,
+    ReportFoundItemForm,
+    ReportLostItemForm,
+)
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item
 from apps.listings.models import ItemImage
 
@@ -93,6 +100,47 @@ def _build_report_page_context(*, form, item_type: str):
             {"label": "Home", "url": reverse("core:home"), "active": False},
             {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
             {"label": f"Report {item_label} Item", "url": None, "active": True},
+        ],
+    }
+
+
+def _user_can_review_claim(user, claim: Claim) -> bool:
+    return user.is_staff or claim.item.reporter_id == user.id
+
+
+def _build_claim_detail_context(request, claim: Claim, *, review_form=None):
+    proof_entries = _build_claim_proof_entries(claim.proofs.all())
+    image_proofs = [entry for entry in proof_entries if entry["is_image"]]
+    non_image_proofs = [entry for entry in proof_entries if not entry["is_image"]]
+
+    if claim.claimant_id == request.user.id:
+        parent_label = "My Claims"
+        parent_url = reverse("listings:my_claims")
+    elif claim.item.reporter_id == request.user.id:
+        parent_label = "Claims Received"
+        parent_url = reverse("listings:my_received_claims")
+    else:
+        parent_label = "Dashboard"
+        parent_url = reverse("core:dashboard")
+
+    can_review_claim = _user_can_review_claim(request.user, claim)
+
+    return {
+        "claim": claim,
+        "proofs": proof_entries,
+        "image_proofs": image_proofs,
+        "non_image_proofs": non_image_proofs,
+        "parsed_claim": _parse_claim_description(claim.description),
+        "can_review_claim": can_review_claim,
+        "show_review_form": can_review_claim and claim.status == Claim.Status.PENDING,
+        "review_form": review_form or ClaimReviewForm(),
+        "review_url": reverse("listings:claim_review", kwargs={"claim_id": claim.id}),
+        "item_details_url": reverse("listings:item_detail_public", kwargs={"pk": claim.item_id}),
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": parent_label, "url": parent_url, "active": False},
+            {"label": f"Claim #{claim.id}", "url": None, "active": True},
         ],
     }
 
@@ -566,10 +614,11 @@ def faq_view(request):
     }
     return render(request, "listings/faq.html", context)
 
+
 @login_required
 def claim_detail_view(request, claim_id: int):
     claim = get_object_or_404(
-        Claim.objects.select_related("item", "claimant", "item__reporter").prefetch_related("proofs"),
+        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer").prefetch_related("proofs"),
         pk=claim_id,
     )
 
@@ -581,32 +630,79 @@ def claim_detail_view(request, claim_id: int):
     if not can_view:
         raise Http404("Claim not found.")
 
-    proof_entries = _build_claim_proof_entries(claim.proofs.all())
-    image_proofs = [entry for entry in proof_entries if entry["is_image"]]
-    non_image_proofs = [entry for entry in proof_entries if not entry["is_image"]]
-
-    if claim.claimant_id == request.user.id:
-        parent_label = "My Claims"
-        parent_url = reverse("listings:my_claims")
-    elif claim.item.reporter_id == request.user.id:
-        parent_label = "Claims Received"
-        parent_url = reverse("listings:my_received_claims")
-    else:
-        parent_label = "Dashboard"
-        parent_url = reverse("core:dashboard")
-
-    context = {
-        "claim": claim,
-        "proofs": proof_entries,
-        "image_proofs": image_proofs,
-        "non_image_proofs": non_image_proofs,
-        "parsed_claim": _parse_claim_description(claim.description),
-        "item_details_url": reverse("listings:item_detail_public", kwargs={"pk": claim.item_id}),
-        "breadcrumb_items": [
-            {"label": "Home", "url": reverse("core:home"), "active": False},
-            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
-            {"label": parent_label, "url": parent_url, "active": False},
-            {"label": f"Claim #{claim.id}", "url": None, "active": True},
-        ],
-    }
+    context = _build_claim_detail_context(request, claim)
     return render(request, "listings/claim_detail.html", context)
+
+
+@login_required
+def claim_review_view(request, claim_id: int):
+    claim = get_object_or_404(
+        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer").prefetch_related("proofs"),
+        pk=claim_id,
+    )
+
+    if not _user_can_review_claim(request.user, claim):
+        raise Http404("Claim not found.")
+
+    if request.method != "POST":
+        return redirect("listings:claim_detail", claim_id=claim.id)
+
+    if claim.status != Claim.Status.PENDING:
+        messages.info(request, "This claim has already been reviewed.")
+        return redirect("listings:claim_detail", claim_id=claim.id)
+
+    review_form = ClaimReviewForm(request.POST)
+    if not review_form.is_valid():
+        context = _build_claim_detail_context(request, claim, review_form=review_form)
+        return render(request, "listings/claim_detail.html", context, status=200)
+
+    decision = review_form.cleaned_data["decision"]
+    reviewer_notes = review_form.cleaned_data["reviewer_notes"]
+
+    with transaction.atomic():
+        claim = Claim.objects.select_for_update().select_related(
+            "item",
+            "claimant",
+            "item__reporter",
+            "reviewer",
+        ).get(pk=claim.pk)
+
+        if claim.status != Claim.Status.PENDING:
+            messages.info(request, "This claim has already been reviewed.")
+            return redirect("listings:claim_detail", claim_id=claim.id)
+
+        if decision == ClaimReviewForm.DECISION_APPROVE and claim.item.status != Item.Status.LOST:
+            messages.error(
+                request,
+                "Only items that are still marked as lost can be approved.",
+            )
+            return redirect("listings:claim_detail", claim_id=claim.id)
+
+        review_time = timezone.now()
+        claim.reviewer = request.user
+        claim.reviewer_notes = reviewer_notes
+        claim.reviewed_at = review_time
+
+        if decision == ClaimReviewForm.DECISION_APPROVE:
+            claim.status = Claim.Status.APPROVED
+            claim.save()
+
+            item = claim.item
+            item.status = Item.Status.CLAIMED
+            item.claimed_by = claim.claimant
+            item.save()
+
+            Claim.objects.filter(item=item, status=Claim.Status.PENDING).exclude(pk=claim.pk).update(
+                status=Claim.Status.REJECTED,
+                reviewer_id=request.user.pk,
+                reviewer_notes="Closed automatically because another claim for this item was approved.",
+                reviewed_at=review_time,
+                updated_at=review_time,
+            )
+            messages.success(request, "Claim approved. The item is now marked as claimed.")
+        else:
+            claim.status = Claim.Status.REJECTED
+            claim.save()
+            messages.success(request, "Claim rejected.")
+
+    return redirect("listings:claim_detail", claim_id=claim.id)
