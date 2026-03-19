@@ -9,6 +9,14 @@ from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
 
 
+class HealthViewTests(TestCase):
+    def test_health_endpoint_returns_ok(self):
+        response = self.client.get(reverse("core:health"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+
 class DashboardViewTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -23,8 +31,12 @@ class DashboardViewTests(TestCase):
             password="StrongPass123!",
         )
 
-        self.category = Category.objects.create(name="Misc", slug="misc", is_active=True)
-        self.location = CampusLocation.objects.create(name="Library Main", code="library-main", is_active=True)
+        self.category = Category.objects.create(
+            name="Misc", slug="misc", is_active=True
+        )
+        self.location = CampusLocation.objects.create(
+            name="Library Main", code="library-main", is_active=True
+        )
         self.item = Item.objects.create(
             reporter=self.user,
             item_type=Item.ItemType.LOST,
@@ -85,7 +97,9 @@ class DashboardViewTests(TestCase):
         UserActivity.objects.create(
             user=self.user,
             activity_type=UserActivity.ActivityType.ITEM_VIEW,
-            page_path=reverse("listings:item_detail_public", kwargs={"pk": self.item.pk}),
+            page_path=reverse(
+                "listings:item_detail_public", kwargs={"pk": self.item.pk}
+            ),
             item=self.item,
             metadata={},
         )
@@ -120,7 +134,9 @@ class HomePublicNavbarTests(TestCase):
         self.assertContains(response, "Logout")
         self.assertNotContains(response, f'href="{reverse("listings:my_items")}"')
         self.assertNotContains(response, f'href="{reverse("listings:my_claims")}"')
-        self.assertNotContains(response, f'href="{reverse("listings:my_received_claims")}"')
+        self.assertNotContains(
+            response, f'href="{reverse("listings:my_received_claims")}"'
+        )
         self.assertNotContains(response, "Claims Recibidos")
         self.assertContains(response, f'href="{reverse("users:login")}"')
         self.assertContains(response, f'href="{reverse("users:register")}"')
@@ -146,8 +162,12 @@ class NotificationViewTests(TestCase):
             email="notifications-other@uwindsor.ca",
             password="StrongPass123!",
         )
-        self.category = Category.objects.create(name="Notifications", slug="notifications", is_active=True)
-        self.location = CampusLocation.objects.create(name="Chrysler", code="chrysler", is_active=True)
+        self.category = Category.objects.create(
+            name="Notifications", slug="notifications", is_active=True
+        )
+        self.location = CampusLocation.objects.create(
+            name="Chrysler", code="chrysler", is_active=True
+        )
         self.item = Item.objects.create(
             reporter=self.other_user,
             item_type=Item.ItemType.LOST,
@@ -170,7 +190,9 @@ class NotificationViewTests(TestCase):
             notification_type=Notification.NotificationType.CLAIM_APPROVED,
             title="Claim approved for Orange USB Drive",
             body="Your claim was approved.",
-            link_path=reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}),
+            link_path=reverse(
+                "listings:claim_detail", kwargs={"claim_id": self.claim.pk}
+            ),
             item=self.item,
             claim=self.claim,
         )
@@ -204,7 +226,10 @@ class NotificationViewTests(TestCase):
         self.assertContains(response, self.read_notification.title)
         self.assertContains(response, 'aria-label="Notifications"')
         self.assertContains(response, reverse("core:notifications_mark_all_read"))
-        self.assertContains(response, reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}))
+        self.assertContains(
+            response,
+            reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}),
+        )
         self.assertContains(response, "Unread")
         self.assertTrue(
             UserActivity.objects.filter(
@@ -242,13 +267,19 @@ class HomeLandingContentTests(TestCase):
             email="home-content@uwindsor.ca",
             password="StrongPass123!",
         )
-        self.category = Category.objects.create(name="Electronics", slug="electronics", is_active=True)
-        self.location = CampusLocation.objects.create(name="Leddy Library", code="leddy-library", is_active=True)
+        self.category = Category.objects.create(
+            name="Electronics", slug="electronics", is_active=True
+        )
+        self.location = CampusLocation.objects.create(
+            name="Leddy Library", code="leddy-library", is_active=True
+        )
         self.url = reverse("core:home")
 
         self._create_items(status=Item.Status.LOST, count=5, prefix="Lost")
         self._create_items(status=Item.Status.FOUND, count=3, prefix="Found")
-        self._create_items(status=Item.Status.LOST, count=1, prefix="Hidden", is_visible=False)
+        self._create_items(
+            status=Item.Status.LOST, count=1, prefix="Hidden", is_visible=False
+        )
 
     def _create_items(self, *, status, count, prefix, is_visible=True):
         now = timezone.now()
@@ -257,7 +288,11 @@ class HomeLandingContentTests(TestCase):
         for index in range(count):
             item = Item.objects.create(
                 reporter=self.reporter,
-                item_type=Item.ItemType.LOST if status == Item.Status.LOST else Item.ItemType.FOUND,
+                item_type=(
+                    Item.ItemType.LOST
+                    if status == Item.Status.LOST
+                    else Item.ItemType.FOUND
+                ),
                 status=status,
                 title=f"{prefix} Item {index}",
                 description=f"{prefix} description {index}",
@@ -281,9 +316,15 @@ class HomeLandingContentTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Lost something on campus?")
         self.assertContains(response, 'method="get"', count=2)
-        self.assertContains(response, f'action="{reverse("listings:search_results")}"', count=2)
-        self.assertContains(response, f'href="{reverse("listings:search_results")}?status=LOST"')
-        self.assertContains(response, f'href="{reverse("listings:search_results")}?status=FOUND"')
+        self.assertContains(
+            response, f'action="{reverse("listings:search_results")}"', count=2
+        )
+        self.assertContains(
+            response, f'href="{reverse("listings:search_results")}?status=LOST"'
+        )
+        self.assertContains(
+            response, f'href="{reverse("listings:search_results")}?status=FOUND"'
+        )
         self.assertContains(response, f'href="{reverse("listings:faq")}"')
         self.assertContains(response, 'id="recent-lost-tab"')
         self.assertContains(response, 'id="recent-found-tab"')

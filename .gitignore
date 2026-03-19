@@ -29,6 +29,7 @@ staticfiles/
 # Environment files
 .env
 .env.*
+!.env.example
 
 # IDEs
 .vscode/
