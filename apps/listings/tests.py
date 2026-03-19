@@ -8,11 +8,13 @@ from datetime import timedelta
 
 from PIL import Image
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
 
 
@@ -94,6 +96,14 @@ class ReportLostItemViewTests(TestCase):
         self.assertEqual(created_item.reporter, self.user)
         self.assertEqual(response.url, reverse("listings:item_detail_public", kwargs={"pk": created_item.pk}))
         self.assertEqual(ItemImage.objects.filter(item=created_item).count(), 1)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.ITEM_REPORT,
+                item=created_item,
+                metadata__item_type=Item.ItemType.LOST,
+            ).exists()
+        )
 
     def test_rejects_future_date(self):
         self.client.login(username=self.user.username, password="StrongPass123!")
@@ -193,6 +203,272 @@ class ReportLostItemViewTests(TestCase):
         event_date_max = form.fields["event_date"].widget.attrs.get("max")
         self.assertIsNotNone(event_date_max)
         self.assertRegex(event_date_max, r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$")
+
+
+class ReportFoundItemViewTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="findit-found-test-media-")
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(lambda: shutil.rmtree(self.media_root, ignore_errors=True))
+
+        self.url = reverse("listings:report_found_item")
+        self.dashboard_url = reverse("core:dashboard")
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="finder@uwindsor.ca",
+            email="finder@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Accessories", slug="accessories", is_active=True)
+        self.location = CampusLocation.objects.create(name="Odette", code="odette", is_active=True)
+
+    def _valid_image_file(self, name: str = "photo.png") -> SimpleUploadedFile:
+        image = Image.new("RGB", (50, 50), color=(80, 120, 160))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
+
+    def test_authenticated_get_renders_found_form(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Report a Found Item")
+        self.assertContains(response, "When did you find it?")
+        self.assertContains(response, f'href="{self.dashboard_url}"')
+
+    def test_creates_found_item_and_image_and_redirects(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "title": "Silver keychain",
+            "category": str(self.category.pk),
+            "event_date": (timezone.now() - timedelta(hours=6)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": "Found near the main lobby desk.",
+        }
+
+        response = self.client.post(
+            self.url,
+            data={**payload, "photos": self._valid_image_file()},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        created_item = Item.objects.get(title="Silver keychain")
+        self.assertEqual(created_item.item_type, Item.ItemType.FOUND)
+        self.assertEqual(created_item.status, Item.Status.FOUND)
+        self.assertEqual(created_item.reporter, self.user)
+        self.assertEqual(ItemImage.objects.filter(item=created_item).count(), 1)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.ITEM_REPORT,
+                item=created_item,
+                metadata__item_type=Item.ItemType.FOUND,
+            ).exists()
+        )
+
+    def test_found_form_rejects_future_date(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "title": "Campus card",
+            "category": str(self.category.pk),
+            "event_date": (timezone.now() + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": "Future date should fail.",
+        }
+
+        response = self.client.post(self.url, data=payload)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Date found cannot be in the future.")
+        self.assertEqual(Item.objects.count(), 0)
+
+
+class SearchAndItemActivityTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="activity-viewer@uwindsor.ca",
+            email="activity-viewer@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.owner = User.objects.create_user(
+            username="activity-owner@uwindsor.ca",
+            email="activity-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.category = Category.objects.create(name="Search Docs", slug="search-docs", is_active=True)
+        self.location = CampusLocation.objects.create(name="Search Hall", code="search-hall", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Blue Wallet",
+            description="Wallet near admin building.",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.search_url = reverse("listings:search_results")
+        self.detail_url = reverse("listings:item_detail_public", kwargs={"pk": self.item.pk})
+
+    def test_search_view_logs_search_activity(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.search_url,
+            {
+                "q": "wallet",
+                "category": self.category.slug,
+                "status": Item.Status.LOST,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.SEARCH,
+                search_query="wallet",
+                metadata__category_slug=self.category.slug,
+                metadata__status=Item.Status.LOST,
+            ).exists()
+        )
+
+    def test_item_detail_logs_item_view_activity(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.ITEM_VIEW,
+                item=self.item,
+            ).exists()
+        )
+
+
+class SearchResultsEnhancementTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.owner = User.objects.create_user(
+            username="search-owner@uwindsor.ca",
+            email="search-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.category_wallets = Category.objects.create(name="Wallets", slug="wallets", is_active=True)
+        self.category_keys = Category.objects.create(name="Keys", slug="keys-search", is_active=True)
+        self.location_library = CampusLocation.objects.create(name="Search Library", code="search-library", is_active=True)
+        self.location_caw = CampusLocation.objects.create(name="CAW Centre", code="caw-centre", is_active=True)
+        self.url = reverse("listings:search_results")
+
+        self.title_match = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Wallet with student card",
+            description="Black leather wallet.",
+            category=self.category_wallets,
+            location=self.location_library,
+            event_date=timezone.now() - timedelta(days=2),
+            is_visible=True,
+        )
+        self.description_match = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Leather accessory pouch",
+            description="Contains wallet receipts and notes.",
+            category=self.category_wallets,
+            location=self.location_caw,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.old_item = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
+            title="Old key ring",
+            description="Found last month.",
+            category=self.category_keys,
+            location=self.location_caw,
+            event_date=timezone.now() - timedelta(days=30),
+            is_visible=True,
+        )
+
+    def test_search_results_render_enhanced_filters_trending_and_suggestions(self):
+        response = self.client.get(self.url, {"q": "search"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="date_from"')
+        self.assertContains(response, 'name="date_to"')
+        self.assertContains(response, "Most relevant")
+        self.assertContains(response, "Trending categories")
+        self.assertContains(response, "Suggestions")
+        self.assertContains(response, self.location_library.name)
+
+    def test_search_results_filter_by_date_range(self):
+        response = self.client.get(
+            self.url,
+            {
+                "date_from": (timezone.now() - timedelta(days=3)).date().isoformat(),
+                "date_to": (timezone.now() - timedelta(days=1)).date().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.title_match.title)
+        self.assertContains(response, self.description_match.title)
+        self.assertNotContains(response, self.old_item.title)
+
+    def test_relevance_sort_prioritizes_title_match(self):
+        response = self.client.get(self.url, {"q": "wallet", "sort": "relevance"})
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertLess(
+            content.index(self.title_match.title),
+            content.index(self.description_match.title),
+        )
+
+    def test_pagination_preserves_new_search_parameters(self):
+        for index in range(13):
+            Item.objects.create(
+                reporter=self.owner,
+                item_type=Item.ItemType.LOST,
+                status=Item.Status.LOST,
+                title=f"Extra search item {index}",
+                description="Extra search fixture",
+                category=self.category_wallets,
+                location=self.location_library,
+                event_date=timezone.now() - timedelta(days=index + 4),
+                is_visible=True,
+            )
+
+        response = self.client.get(
+            self.url,
+            {
+                "q": "item",
+                "sort": "event_date_desc",
+                "date_from": (timezone.now() - timedelta(days=20)).date().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Page 1 of")
+        self.assertContains(response, "sort=event_date_desc")
+        self.assertContains(response, "date_from=")
 
 
 class ClaimCreateViewTests(TestCase):
@@ -302,6 +578,43 @@ class ClaimCreateViewTests(TestCase):
         self.assertIn("Relationship to item: Owner", created_claim.description)
         self.assertIn("Where lost: Library", created_claim.description)
         self.assertEqual(ClaimProof.objects.filter(claim=created_claim).count(), 2)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.CLAIM_SUBMISSION,
+                item=self.item,
+                metadata__claim_id=created_claim.id,
+            ).exists()
+        )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_valid_post_creates_owner_notification_and_email(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "full_name": "Avery Jones",
+            "email": "claimant@uwindsor.ca",
+            "relationship_to_item": "Owner",
+            "detailed_description": "Wallet has a blue stripe and two student cards.",
+            "where_lost_location": str(self.location.pk),
+            "consent": "on",
+            "proof_files": [self._valid_image_file()],
+        }
+
+        response = self.client.post(self.url, data=payload, format="multipart")
+
+        self.assertEqual(response.status_code, 302)
+        created_claim = Claim.objects.get()
+        notification = Notification.objects.get(
+            recipient=self.reporter,
+            claim=created_claim,
+            notification_type=Notification.NotificationType.CLAIM_SUBMITTED,
+        )
+        self.assertIn(self.item.title, notification.title)
+        self.assertEqual(notification.link_path, reverse("listings:claim_detail", kwargs={"claim_id": created_claim.pk}))
+        self.assertTrue(notification.email_sent)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn(self.item.title, mail.outbox[0].subject)
 
     def test_invalid_post_shows_top_alert_and_field_errors(self):
         self.client.login(username=self.user.username, password="StrongPass123!")
@@ -575,6 +888,8 @@ class MyReceivedClaimsViewTests(TestCase):
         self.assertNotContains(response, self.other_item.title)
         self.assertContains(response, self.claimant_1.email)
         self.assertContains(response, self.claimant_2.email)
+        self.assertContains(response, "Review claim")
+        self.assertContains(response, "Claim details")
 
     def test_filters_status_and_search(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")
@@ -671,8 +986,28 @@ class MyItemsViewTests(TestCase):
         self.assertContains(response, self.item_2.title)
         self.assertNotContains(response, self.other_item.title)
         self.assertContains(response, "Pending claims: 1")
-        self.assertContains(response, "Create New")
+        self.assertContains(response, "Report Lost")
+        self.assertContains(response, "Report Found")
         self.assertContains(response, "Claims Received")
+
+    def test_claimed_item_shows_confirm_return_action(self):
+        approved_claim = Claim.objects.create(
+            item=self.item_2,
+            claimant=self.claimant,
+            description="Approved claim for item 2",
+            status=Claim.Status.APPROVED,
+        )
+        self.item_2.status = Item.Status.CLAIMED
+        self.item_2.claimed_by = self.claimant
+        self.item_2.save(update_fields=["status", "claimed_by"])
+
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("listings:claim_detail", kwargs={"claim_id": approved_claim.pk}))
+        self.assertContains(response, reverse("listings:claim_confirm_return", kwargs={"claim_id": approved_claim.pk}))
+        self.assertContains(response, "Confirm Return")
 
 
 class ClaimDetailViewTests(TestCase):
@@ -731,6 +1066,7 @@ class ClaimDetailViewTests(TestCase):
         ClaimProof.objects.create(claim=self.claim, file=doc_file)
 
         self.url = reverse("listings:claim_detail", kwargs={"claim_id": self.claim.id})
+        self.review_url = reverse("listings:claim_review", kwargs={"claim_id": self.claim.id})
 
     def _valid_image_file(self, name: str = "proof.png") -> SimpleUploadedFile:
         image = Image.new("RGB", (50, 50), color=(120, 120, 120))
@@ -754,20 +1090,519 @@ class ClaimDetailViewTests(TestCase):
         self.assertContains(response, "Other files")
         self.assertContains(response, "proof-image.png")
         self.assertContains(response, "proof-document.pdf")
+        self.assertNotContains(response, "Review claim")
 
     def test_reporter_can_view_detail(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.claimant.email)
+        self.assertContains(response, "Review claim")
+        self.assertContains(response, f'action="{self.review_url}"')
 
     def test_admin_can_view_detail(self):
         self.client.login(username=self.admin_user.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Claim details")
+        self.assertContains(response, "Review claim")
 
     def test_unrelated_user_gets_404(self):
         self.client.login(username=self.third_user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_reviewed_claim_shows_reviewer_metadata(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.admin_user
+        self.claim.reviewer_notes = "Claim details match the recovered item."
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save()
+
+        self.client.login(username=self.claimant.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Reviewed by")
+        self.assertContains(response, self.admin_user.username)
+        self.assertContains(response, "Claim details match the recovered item.")
+
+    def test_reporter_sees_confirm_return_when_item_is_claimed(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.admin_user
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save(update_fields=["status", "reviewer", "reviewed_at"])
+        self.item.status = Item.Status.CLAIMED
+        self.item.claimed_by = self.claimant
+        self.item.save(update_fields=["status", "claimed_by"])
+
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Complete return")
+        self.assertContains(response, reverse("listings:claim_confirm_return", kwargs={"claim_id": self.claim.pk}))
+
+    def test_claimant_sees_return_complete_message_once_returned(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.admin_user
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save(update_fields=["status", "reviewer", "reviewed_at"])
+        self.item.status = Item.Status.RETURNED
+        self.item.claimed_by = self.claimant
+        self.item.save(update_fields=["status", "claimed_by"])
+
+        self.client.login(username=self.claimant.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The return has been confirmed for this approved claim.")
+
+
+class ClaimReviewViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.reporter = User.objects.create_user(
+            username="review-owner@uwindsor.ca",
+            email="review-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant_1 = User.objects.create_user(
+            username="review-claimant-1@uwindsor.ca",
+            email="review-claimant-1@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant_2 = User.objects.create_user(
+            username="review-claimant-2@uwindsor.ca",
+            email="review-claimant-2@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="review-other@uwindsor.ca",
+            email="review-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.admin_user = User.objects.create_user(
+            username="review-admin@uwindsor.ca",
+            email="review-admin@uwindsor.ca",
+            password="StrongPass123!",
+            is_staff=True,
+        )
+
+        self.category = Category.objects.create(name="Review Docs", slug="review-docs", is_active=True)
+        self.location = CampusLocation.objects.create(name="Review Hall", code="review-hall", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Student ID Wallet",
+            description="Brown wallet with student ID",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=2),
+            is_visible=True,
+        )
+        self.claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.claimant_1,
+            description="Primary claim",
+            status=Claim.Status.PENDING,
+        )
+        self.other_pending_claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.claimant_2,
+            description="Backup claim",
+            status=Claim.Status.PENDING,
+        )
+
+        self.url = reverse("listings:claim_review", kwargs={"claim_id": self.claim.id})
+        self.detail_url = reverse("listings:claim_detail", kwargs={"claim_id": self.claim.id})
+
+    def test_redirects_guest_to_login(self):
+        response = self.client.post(self.url, {"decision": "approve"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_reporter_can_approve_claim_and_close_other_pending_claims(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Proof matches the serial details on the wallet.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        self.claim.refresh_from_db()
+        self.other_pending_claim.refresh_from_db()
+        self.item.refresh_from_db()
+
+        self.assertEqual(self.claim.status, Claim.Status.APPROVED)
+        self.assertEqual(self.claim.reviewer, self.reporter)
+        self.assertEqual(self.claim.reviewer_notes, "Proof matches the serial details on the wallet.")
+        self.assertIsNotNone(self.claim.reviewed_at)
+        self.assertEqual(self.item.status, Item.Status.CLAIMED)
+        self.assertEqual(self.item.claimed_by, self.claimant_1)
+        self.assertEqual(self.other_pending_claim.status, Claim.Status.REJECTED)
+        self.assertEqual(self.other_pending_claim.reviewer, self.reporter)
+        self.assertIn("another claim for this item was approved", self.other_pending_claim.reviewer_notes.lower())
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.reporter,
+                activity_type=UserActivity.ActivityType.CLAIM_REVIEW,
+                item=self.item,
+                metadata__claim_id=self.claim.id,
+                metadata__decision="approve",
+            ).exists()
+        )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_approve_notifies_primary_and_auto_rejected_claimants(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Proof matches the serial details on the wallet.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        approved_notification = Notification.objects.get(
+            recipient=self.claimant_1,
+            claim=self.claim,
+            notification_type=Notification.NotificationType.CLAIM_APPROVED,
+        )
+        rejected_notification = Notification.objects.get(
+            recipient=self.claimant_2,
+            claim=self.other_pending_claim,
+            notification_type=Notification.NotificationType.CLAIM_REJECTED,
+        )
+        self.assertIn("approved", approved_notification.title.lower())
+        self.assertIn("another claim", rejected_notification.body.lower())
+        self.assertEqual(len(mail.outbox), 2)
+
+
+    def test_reporter_can_reject_claim_with_notes(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "reject",
+                "reviewer_notes": "The identifying details do not match the item report.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        self.claim.refresh_from_db()
+        self.item.refresh_from_db()
+
+        self.assertEqual(self.claim.status, Claim.Status.REJECTED)
+        self.assertEqual(self.claim.reviewer, self.reporter)
+        self.assertEqual(self.item.status, Item.Status.LOST)
+        self.assertIsNone(self.item.claimed_by)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.reporter,
+                activity_type=UserActivity.ActivityType.CLAIM_REVIEW,
+                item=self.item,
+                metadata__claim_id=self.claim.id,
+                metadata__decision="reject",
+            ).exists()
+        )
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_reject_notifies_claimant(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "reject",
+                "reviewer_notes": "The identifying details do not match the item report.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        notification = Notification.objects.get(
+            recipient=self.claimant_1,
+            claim=self.claim,
+            notification_type=Notification.NotificationType.CLAIM_REJECTED,
+        )
+        self.assertIn("rejected", notification.title.lower())
+        self.assertIn("identifying details", notification.body.lower())
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_reject_requires_reviewer_notes(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, {"decision": "reject"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Please provide a reason when rejecting a claim.")
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.PENDING)
+
+    def test_claimant_cannot_review_claim(self):
+        self.client.login(username=self.claimant_1.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, {"decision": "approve"})
+
+        self.assertEqual(response.status_code, 404)
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.PENDING)
+
+    def test_admin_can_review_claim(self):
+        self.client.login(username=self.admin_user.username, password="StrongPass123!")
+
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Approved by admin review.",
+            },
+        )
+
+        self.assertRedirects(response, self.detail_url)
+        self.claim.refresh_from_db()
+        self.item.refresh_from_db()
+
+        self.assertEqual(self.claim.status, Claim.Status.APPROVED)
+        self.assertEqual(self.claim.reviewer, self.admin_user)
+        self.assertEqual(self.item.claimed_by, self.claimant_1)
+
+    def test_already_reviewed_claim_cannot_be_reviewed_twice(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.reporter
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save()
+
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.post(self.url, {"decision": "reject"}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This claim has already been reviewed.")
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.APPROVED)
+
+    def test_cannot_approve_claim_when_item_is_no_longer_lost(self):
+        self.item.status = Item.Status.RETURNED
+        self.item.save(update_fields=["status"])
+
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.post(
+            self.url,
+            {
+                "decision": "approve",
+                "reviewer_notes": "Trying to approve after item status changed.",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Only items that are still marked as lost can be approved.")
+        self.claim.refresh_from_db()
+        self.assertEqual(self.claim.status, Claim.Status.PENDING)
+
+
+class ClaimReturnViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.reporter = User.objects.create_user(
+            username="return-owner@uwindsor.ca",
+            email="return-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant = User.objects.create_user(
+            username="return-claimant@uwindsor.ca",
+            email="return-claimant@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.admin_user = User.objects.create_user(
+            username="return-admin@uwindsor.ca",
+            email="return-admin@uwindsor.ca",
+            password="StrongPass123!",
+            is_staff=True,
+        )
+        self.other_user = User.objects.create_user(
+            username="return-other@uwindsor.ca",
+            email="return-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Return Docs", slug="return-docs", is_active=True)
+        self.location = CampusLocation.objects.create(name="Return Hall", code="return-hall", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.CLAIMED,
+            title="Grey Laptop Sleeve",
+            description="Claimed item waiting for handoff.",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=2),
+            claimed_by=self.claimant,
+            is_visible=True,
+        )
+        self.claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.claimant,
+            description="Approved claim for returned flow.",
+            status=Claim.Status.APPROVED,
+            reviewer=self.reporter,
+            reviewed_at=timezone.now(),
+        )
+        self.url = reverse("listings:claim_confirm_return", kwargs={"claim_id": self.claim.pk})
+        self.detail_url = reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk})
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_reporter_can_confirm_return_and_notify_claimant(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Return confirmed. The item is now marked as returned.")
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.RETURNED)
+        notification = Notification.objects.get(
+            recipient=self.claimant,
+            claim=self.claim,
+            notification_type=Notification.NotificationType.ITEM_RETURNED,
+        )
+        self.assertIn("returned", notification.title.lower())
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_admin_can_confirm_return(self):
+        self.client.login(username=self.admin_user.username, password="StrongPass123!")
+
+        response = self.client.post(self.url)
+
+        self.assertRedirects(response, self.detail_url)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.RETURNED)
+
+    def test_claimant_cannot_confirm_return(self):
+        self.client.login(username=self.claimant.username, password="StrongPass123!")
+
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 404)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.CLAIMED)
+
+    def test_cannot_confirm_return_when_item_is_not_claimed(self):
+        self.item.status = Item.Status.LOST
+        self.item.save(update_fields=["status"])
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Only claimed items can be marked as returned.")
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.LOST)
+
+
+class ItemEditViewTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="findit-item-edit-media-")
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(lambda: shutil.rmtree(self.media_root, ignore_errors=True))
+
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="item-owner@uwindsor.ca",
+            email="item-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.other_user = User.objects.create_user(
+            username="item-other@uwindsor.ca",
+            email="item-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Keys", slug="keys", is_active=True)
+        self.location = CampusLocation.objects.create(name="Library", code="library-main", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.user,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Key fob",
+            description="Black key fob",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.image_1 = ItemImage.objects.create(item=self.item, image=self._valid_image_file("img-1.png"))
+        self.image_2 = ItemImage.objects.create(item=self.item, image=self._valid_image_file("img-2.png"))
+        self.url = reverse("listings:item_edit", kwargs={"pk": self.item.pk})
+
+    def _valid_image_file(self, name: str = "photo.png") -> SimpleUploadedFile:
+        image = Image.new("RGB", (50, 50), color=(100, 110, 120))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        buffer.seek(0)
+        return SimpleUploadedFile(name, buffer.read(), content_type="image/png")
+
+    def test_owner_can_update_status_remove_image_and_add_new_one(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+
+        payload = {
+            "title": "Key fob updated",
+            "category": str(self.category.pk),
+            "status": Item.Status.RETURNED,
+            "event_date": (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": "Returned to the owner.",
+            "remove_images": [str(self.image_1.pk)],
+        }
+
+        response = self.client.post(
+            self.url,
+            data={**payload, "photos": self._valid_image_file("replacement.png")},
+            format="multipart",
+        )
+
+        self.assertRedirects(response, reverse("listings:item_detail_public", kwargs={"pk": self.item.pk}))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.title, "Key fob updated")
+        self.assertEqual(self.item.status, Item.Status.RETURNED)
+        self.assertFalse(ItemImage.objects.filter(pk=self.image_1.pk).exists())
+        self.assertEqual(ItemImage.objects.filter(item=self.item).count(), 2)
+        self.assertTrue(ItemImage.objects.filter(item=self.item, image__icontains="replacement").exists())
+
+    def test_rejects_when_total_image_count_would_exceed_limit(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        for idx in range(3):
+            ItemImage.objects.create(item=self.item, image=self._valid_image_file(f"extra-{idx}.png"))
+
+        payload = {
+            "title": self.item.title,
+            "category": str(self.category.pk),
+            "status": Item.Status.LOST,
+            "event_date": (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M"),
+            "location": str(self.location.pk),
+            "description": self.item.description,
+        }
+
+        response = self.client.post(
+            self.url,
+            data={**payload, "photos": self._valid_image_file("overflow.png")},
+            format="multipart",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You can keep up to 5 photos total.")
+
+    def test_non_owner_gets_404(self):
+        self.client.login(username=self.other_user.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 404)

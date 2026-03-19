@@ -40,7 +40,75 @@
     {% endif %}
   </div>
 
-<div class="mb-3">
+  <div class="row g-3">
+    <div class="col-12 col-md-6">
+      <label class="form-label" for="id_first_name">First name</label>
+      <input
+        type="text"
+        name="first_name"
+        class="form-control {% if form.first_name.errors %}is-invalid{% endif %}"
+        id="id_first_name"
+        placeholder="First name"
+        value="{{ form.first_name.value|default_if_none:'' }}"
+        required
+      />
+      {% if form.first_name.errors %}
+        <div class="invalid-feedback">{{ form.first_name.errors|striptags }}</div>
+      {% endif %}
+    </div>
+
+    <div class="col-12 col-md-6">
+      <label class="form-label" for="id_last_name">Last name</label>
+      <input
+        type="text"
+        name="last_name"
+        class="form-control {% if form.last_name.errors %}is-invalid{% endif %}"
+        id="id_last_name"
+        placeholder="Last name"
+        value="{{ form.last_name.value|default_if_none:'' }}"
+        required
+      />
+      {% if form.last_name.errors %}
+        <div class="invalid-feedback">{{ form.last_name.errors|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3 mt-0">
+    <div class="col-12 col-md-6">
+      <label class="form-label" for="id_student_id">Student ID</label>
+      <input
+        type="text"
+        name="student_id"
+        class="form-control {% if form.student_id.errors %}is-invalid{% endif %}"
+        id="id_student_id"
+        placeholder="9-digit student ID"
+        value="{{ form.student_id.value|default_if_none:'' }}"
+        required
+      />
+      {% if form.student_id.errors %}
+        <div class="invalid-feedback">{{ form.student_id.errors|striptags }}</div>
+      {% endif %}
+    </div>
+
+    <div class="col-12 col-md-6">
+      <label class="form-label" for="id_phone_number">Phone number</label>
+      <input
+        type="text"
+        name="phone_number"
+        class="form-control {% if form.phone_number.errors %}is-invalid{% endif %}"
+        id="id_phone_number"
+        placeholder="Phone number"
+        value="{{ form.phone_number.value|default_if_none:'' }}"
+        required
+      />
+      {% if form.phone_number.errors %}
+        <div class="invalid-feedback">{{ form.phone_number.errors|striptags }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+<div class="mb-3 mt-3">
   <label class="form-label" for="id_password1">Password</label>
 
   <div class="input-group">
@@ -71,7 +139,7 @@
 </div>
 
  <div class="mb-3">
-  <label class="form-label" for="id_password2">Password</label>
+  <label class="form-label" for="id_password2">Confirm password</label>
 
   <div class="input-group">
     <input

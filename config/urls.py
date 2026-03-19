@@ -4,6 +4,12 @@ from django.conf.urls.static import static
 from django.urls import include, path
 
 handler404 = "apps.core.views.custom_404_view"
+handler403 = "apps.core.views.custom_403_view"
+handler500 = "apps.core.views.custom_500_view"
+
+admin.site.site_header = "FindIt Administration"
+admin.site.site_title = "FindIt Admin"
+admin.site.index_title = "Moderation and management"
 
 urlpatterns = [
     path("admin/", admin.site.urls),

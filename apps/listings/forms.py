@@ -3,7 +3,7 @@ from __future__ import annotations
 from django import forms
 from django.utils import timezone
 
-from apps.listings.models import CampusLocation, Category, Item
+from apps.listings.models import CampusLocation, Category, Item, ItemImage
 
 
 class MultiFileInput(forms.ClearableFileInput):
@@ -31,6 +31,21 @@ class MultiFileField(forms.FileField):
             raise forms.ValidationError(errors)
 
         return cleaned_files
+
+
+def _status_choices_for_item_type(item_type: str):
+    if item_type == Item.ItemType.FOUND:
+        return [
+            (Item.Status.FOUND, "Found"),
+            (Item.Status.CLAIMED, "Claimed"),
+            (Item.Status.RETURNED, "Returned"),
+        ]
+
+    return [
+        (Item.Status.LOST, "Lost"),
+        (Item.Status.CLAIMED, "Claimed"),
+        (Item.Status.RETURNED, "Returned"),
+    ]
 
 
 class ReportLostItemForm(forms.ModelForm):
@@ -67,25 +82,34 @@ class ReportLostItemForm(forms.ModelForm):
     max_file_size = 5 * 1024 * 1024
     allowed_content_types = {"image/jpeg", "image/png"}
     allowed_extensions = {".jpg", ".jpeg", ".png"}
+    item_type = Item.ItemType.LOST
 
     def __init__(self, *args, **kwargs):
+        self.item_type = kwargs.pop("item_type", self.item_type)
         super().__init__(*args, **kwargs)
         self.fields["category"].queryset = Category.objects.filter(is_active=True)
         self.fields["location"].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields["event_date"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["event_date"].help_text = "Approximate date is fine."
         self.fields["event_date"].widget.attrs["max"] = timezone.localtime().strftime("%Y-%m-%dT%H:%M")
-        self.fields["title"].label = "What did you lose?"
+        self.fields["title"].label = (
+            "What did you find?" if self.item_type == Item.ItemType.FOUND else "What did you lose?"
+        )
         self.fields["category"].label = "Category"
-        self.fields["event_date"].label = "When did you lose it?"
-        self.fields["location"].label = "Where did you lose it?"
+        self.fields["event_date"].label = (
+            "When did you find it?" if self.item_type == Item.ItemType.FOUND else "When did you lose it?"
+        )
+        self.fields["location"].label = (
+            "Where did you find it?" if self.item_type == Item.ItemType.FOUND else "Where did you lose it?"
+        )
         self.fields["description"].label = "Detailed Description"
         self.fields["photos"].label = "Upload Photos (Optional)"
 
     def clean_event_date(self):
         event_date = self.cleaned_data.get("event_date")
         if event_date and event_date > timezone.now():
-            raise forms.ValidationError("Date lost cannot be in the future.")
+            action = "found" if self.item_type == Item.ItemType.FOUND else "lost"
+            raise forms.ValidationError(f"Date {action} cannot be in the future.")
         return event_date
 
     def clean_description(self):
@@ -123,6 +147,10 @@ class ReportLostItemForm(forms.ModelForm):
                 self.add_error("photos", f"{image.name}: file size must be <= 5MB.")
 
         return cleaned
+
+
+class ReportFoundItemForm(ReportLostItemForm):
+    item_type = Item.ItemType.FOUND
 
 
 class ClaimCreateForm(forms.Form):
@@ -228,7 +256,51 @@ class ClaimCreateForm(forms.Form):
 
         return list(files)
 
+
+class ClaimReviewForm(forms.Form):
+    DECISION_APPROVE = "approve"
+    DECISION_REJECT = "reject"
+    DECISION_CHOICES = (
+        (DECISION_APPROVE, "Approve"),
+        (DECISION_REJECT, "Reject"),
+    )
+
+    decision = forms.ChoiceField(
+        choices=DECISION_CHOICES,
+        widget=forms.HiddenInput(),
+    )
+    reviewer_notes = forms.CharField(
+        required=False,
+        max_length=1000,
+        widget=forms.Textarea(
+            attrs={
+                "class": "form-control",
+                "rows": 4,
+                "placeholder": "Add any notes for the claimant. Required when rejecting.",
+            }
+        ),
+    )
+
+    def clean_reviewer_notes(self):
+        return (self.cleaned_data.get("reviewer_notes") or "").strip()
+
+    def clean(self):
+        cleaned = super().clean()
+        if (
+            cleaned.get("decision") == self.DECISION_REJECT
+            and not cleaned.get("reviewer_notes")
+        ):
+            self.add_error("reviewer_notes", "Please provide a reason when rejecting a claim.")
+
+        return cleaned
+
+
 class ItemEditForm(forms.ModelForm):
+    status = forms.ChoiceField(
+        required=True,
+        choices=[],
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
     photos = MultiFileField(
         required=False,
         widget=MultiFileInput(
@@ -238,10 +310,15 @@ class ItemEditForm(forms.ModelForm):
             }
         ),
     )
+    remove_images = forms.ModelMultipleChoiceField(
+        required=False,
+        queryset=ItemImage.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+    )
 
     class Meta:
         model = Item
-        fields = ["title", "category", "event_date", "location", "description"]
+        fields = ["title", "category", "status", "event_date", "location", "description"]
         widgets = {
             "title": forms.TextInput(
                 attrs={
@@ -251,6 +328,7 @@ class ItemEditForm(forms.ModelForm):
                 }
             ),
             "category": forms.Select(attrs={"class": "form-select"}),
+            "status": forms.Select(attrs={"class": "form-select"}),
             "event_date": forms.DateTimeInput(
                 attrs={"class": "form-control", "type": "datetime-local"}
             ),
@@ -277,12 +355,20 @@ class ItemEditForm(forms.ModelForm):
         self.fields["event_date"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["event_date"].help_text = "Approximate date is fine."
         self.fields["event_date"].widget.attrs["max"] = timezone.localtime().strftime("%Y-%m-%dT%H:%M")
+        self.fields["status"].choices = _status_choices_for_item_type(self.instance.item_type)
         self.fields["title"].label = "Item title"
         self.fields["category"].label = "Category"
-        self.fields["event_date"].label = "When was it lost?"
+        self.fields["status"].label = "Status"
+        self.fields["event_date"].label = (
+            "When was it found?" if self.instance.item_type == Item.ItemType.FOUND else "When was it lost?"
+        )
         self.fields["location"].label = "Location"
         self.fields["description"].label = "Detailed Description"
         self.fields["photos"].label = "Add More Photos (Optional)"
+        self.fields["remove_images"].label = "Remove Current Photos"
+        self.fields["remove_images"].queryset = (
+            self.instance.images.all() if self.instance and self.instance.pk else ItemImage.objects.none()
+        )
 
         if self.instance and self.instance.event_date:
             local_dt = timezone.localtime(self.instance.event_date)
@@ -291,7 +377,8 @@ class ItemEditForm(forms.ModelForm):
     def clean_event_date(self):
         event_date = self.cleaned_data.get("event_date")
         if event_date and event_date > timezone.now():
-            raise forms.ValidationError("Date lost cannot be in the future.")
+            action = "found" if self.instance.item_type == Item.ItemType.FOUND else "lost"
+            raise forms.ValidationError(f"Date {action} cannot be in the future.")
         return event_date
 
     def clean_description(self):
@@ -301,6 +388,13 @@ class ItemEditForm(forms.ModelForm):
         if len(description) > 500:
             raise forms.ValidationError("Description must be at most 500 characters.")
         return description
+
+    def clean_status(self):
+        status = self.cleaned_data.get("status")
+        allowed_statuses = {choice[0] for choice in _status_choices_for_item_type(self.instance.item_type)}
+        if status not in allowed_statuses:
+            raise forms.ValidationError("Select a valid status for this item.")
+        return status
 
     def clean(self):
         cleaned = super().clean()
@@ -327,5 +421,16 @@ class ItemEditForm(forms.ModelForm):
 
             if image.size > self.max_file_size:
                 self.add_error("photos", f"{image.name}: file size must be <= 5MB.")
+
+        remove_images = cleaned.get("remove_images")
+        remove_count = remove_images.count() if remove_images is not None else 0
+        current_image_count = self.instance.images.count() if self.instance.pk else 0
+        total_after_save = current_image_count - remove_count + len(files)
+
+        if total_after_save > self.max_files:
+            self.add_error(
+                "photos",
+                f"You can keep up to {self.max_files} photos total. Remove some current photos before adding more.",
+            )
 
         return cleaned

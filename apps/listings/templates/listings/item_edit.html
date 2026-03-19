@@ -4,7 +4,7 @@
 
 {% block content %}
 <div class="container py-4">
-  {% include "partials/breadcrumbs.html" with items=breadcrumb_items %}
+  {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
 
   <div class="row justify-content-center">
     <div class="col-lg-8">
@@ -38,19 +38,26 @@
               </div>
 
               <div class="col-md-6">
+                <label class="form-label" for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
+                {{ form.status }}
+                {% for error in form.status.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </div>
+            </div>
+
+            <div class="row g-3 mt-0">
+              <div class="col-md-6">
                 <label class="form-label" for="{{ form.location.id_for_label }}">{{ form.location.label }}</label>
                 {{ form.location }}
                 {% for error in form.location.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
               </div>
-            </div>
-
-            <div class="mt-3">
-              <label class="form-label" for="{{ form.event_date.id_for_label }}">{{ form.event_date.label }}</label>
-              {{ form.event_date }}
-              {% if form.event_date.help_text %}
-                <div class="form-text">{{ form.event_date.help_text }}</div>
-              {% endif %}
-              {% for error in form.event_date.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.event_date.id_for_label }}">{{ form.event_date.label }}</label>
+                {{ form.event_date }}
+                {% if form.event_date.help_text %}
+                  <div class="form-text">{{ form.event_date.help_text }}</div>
+                {% endif %}
+                {% for error in form.event_date.errors %}<div class="text-danger small">{{ error }}</div>{% endfor %}
+              </div>
             </div>
 
             <div class="mt-3">
@@ -72,17 +79,32 @@
                 <div class="row g-3">
                   {% for image in images %}
                     <div class="col-6 col-md-4">
-                      <div class="card">
+                      <div class="card h-100">
                         <img
                           src="{{ image.image.url }}"
                           class="card-img-top"
                           alt="{{ image.alt_text|default:item.title }}"
                           style="height: 180px; object-fit: cover;"
                         >
+                        <div class="card-body p-2">
+                          <div class="form-check">
+                            <input
+                              class="form-check-input"
+                              type="checkbox"
+                              name="remove_images"
+                              id="remove-image-{{ image.id }}"
+                              value="{{ image.id }}"
+                            >
+                            <label class="form-check-label small" for="remove-image-{{ image.id }}">
+                              Remove this photo
+                            </label>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   {% endfor %}
                 </div>
+                {% for error in form.remove_images.errors %}<div class="text-danger small mt-2">{{ error }}</div>{% endfor %}
               </div>
             {% endif %}
 

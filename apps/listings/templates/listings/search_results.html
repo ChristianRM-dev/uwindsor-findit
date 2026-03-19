@@ -6,110 +6,181 @@
 
 {% block content %}
 <div class="container py-4">
-<h1 class="mb-3">Search Results</h1>
+  <div class="d-flex justify-content-between align-items-start gap-3 flex-column flex-lg-row mb-3">
+    <div>
+      <h1 class="mb-1">Search Results</h1>
+      <p class="text-muted mb-0">Browse lost, found, claimed, and returned items across campus.</p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary" href="{% url 'listings:report_lost_item' %}">Report Lost</a>
+      <a class="btn btn-outline-secondary" href="{% url 'listings:report_found_item' %}">Report Found</a>
+    </div>
+  </div>
 
-  <form method="get" action="{% url 'listings:search_results' %}" class="row g-2 mb-3">
-<div class="col-md-3">
-<input type="text" name="q" value="{{ filters.q }}" class="form-control" placeholder="Search items...">
-</div>
-
-    <div class="col-md-2">
-<select name="category" class="form-select">
-<option value="">All categories</option>
-
-        {% for c in categories %}
-<option value="{{ c.slug }}" {% if filters.category == c.slug %}selected{% endif %}>{{ c.name }}</option>
-
+  {% if trending_categories %}
+    <div class="mb-3">
+      <div class="small text-muted mb-2">Trending categories</div>
+      <div class="d-flex flex-wrap gap-2">
+        {% for category in trending_categories %}
+          <a
+            class="badge rounded-pill text-bg-light border text-decoration-none"
+            href="{% url 'listings:search_results' %}?category={{ category.slug }}"
+          >
+            {{ category.name }} ({{ category.visible_item_count }})
+          </a>
         {% endfor %}
-</select>
-</div>
-
-    <div class="col-md-2">
-<select name="location" class="form-select">
-<option value="">All locations</option>
-
-        {% for l in locations %}
-<option value="{{ l.code }}" {% if filters.location == l.code %}selected{% endif %}>{{ l.name }}</option>
-
-        {% endfor %}
-</select>
-</div>
-
-    <div class="col-md-2">
-<select name="status" class="form-select">
-<option value="">All status</option>
-<option value="LOST" {% if filters.status == "LOST" %}selected{% endif %}>Lost</option>
-<option value="FOUND" {% if filters.status == "FOUND" %}selected{% endif %}>Found</option>
-<option value="CLAIMED" {% if filters.status == "CLAIMED" %}selected{% endif %}>Claimed</option>
-<option value="RETURNED" {% if filters.status == "RETURNED" %}selected{% endif %}>Returned</option>
-</select>
-</div>
-
-    <div class="col-md-3">
-      <div class="d-flex gap-2">
-        <button class="btn btn-primary flex-fill" type="submit">Apply</button>
-        <a class="btn btn-outline-secondary flex-fill" href="{% url 'listings:report_lost_item' %}">Report Lost Item</a>
       </div>
-</div>
-</form>
-
-  {% if query_chips %}
-<div class="mb-3">
-
-      {% for chip in query_chips %}
-<span class="badge text-bg-light border me-1">{{ chip.label }}: {{ chip.value }}</span>
-
-      {% endfor %}
-</div>
-
+    </div>
   {% endif %}
 
-  <p class="text-muted">{{ result_count }} result{{ result_count|pluralize }}</p>
+  <form method="get" action="{% url 'listings:search_results' %}" class="card card-body mb-3">
+    <div class="row g-2">
+      <div class="col-12 col-lg-4">
+        <label class="form-label small text-muted mb-1" for="search-query">Keyword</label>
+        <input
+          id="search-query"
+          type="text"
+          name="q"
+          value="{{ filters.q }}"
+          class="form-control"
+          placeholder="Search items, categories, or locations..."
+          list="search-suggestion-list"
+        >
+        {% if search_hint_values %}
+          <datalist id="search-suggestion-list">
+            {% for hint in search_hint_values %}
+              <option value="{{ hint }}"></option>
+            {% endfor %}
+          </datalist>
+        {% endif %}
+      </div>
+
+      <div class="col-6 col-lg-2">
+        <label class="form-label small text-muted mb-1">Category</label>
+        <select name="category" class="form-select">
+          <option value="">All categories</option>
+          {% for c in categories %}
+            <option value="{{ c.slug }}" {% if filters.category == c.slug %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-6 col-lg-2">
+        <label class="form-label small text-muted mb-1">Location</label>
+        <select name="location" class="form-select">
+          <option value="">All locations</option>
+          {% for l in locations %}
+            <option value="{{ l.code }}" {% if filters.location == l.code %}selected{% endif %}>{{ l.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-6 col-lg-2">
+        <label class="form-label small text-muted mb-1">Status</label>
+        <select name="status" class="form-select">
+          <option value="">All status</option>
+          <option value="LOST" {% if filters.status == "LOST" %}selected{% endif %}>Lost</option>
+          <option value="FOUND" {% if filters.status == "FOUND" %}selected{% endif %}>Found</option>
+          <option value="CLAIMED" {% if filters.status == "CLAIMED" %}selected{% endif %}>Claimed</option>
+          <option value="RETURNED" {% if filters.status == "RETURNED" %}selected{% endif %}>Returned</option>
+        </select>
+      </div>
+
+      <div class="col-6 col-lg-2">
+        <label class="form-label small text-muted mb-1">Sort by</label>
+        <select name="sort" class="form-select">
+          {% for sort_value, sort_label in sort_options %}
+            <option value="{{ sort_value }}" {% if filters.sort == sort_value %}selected{% endif %}>{{ sort_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-6 col-lg-2">
+        <label class="form-label small text-muted mb-1">Date from</label>
+        <input type="date" name="date_from" value="{{ filters.date_from }}" class="form-control">
+      </div>
+
+      <div class="col-6 col-lg-2">
+        <label class="form-label small text-muted mb-1">Date to</label>
+        <input type="date" name="date_to" value="{{ filters.date_to }}" class="form-control">
+      </div>
+
+      <div class="col-12 col-lg-4">
+        <label class="form-label small text-muted mb-1 d-block">&nbsp;</label>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-primary flex-fill" type="submit">Apply</button>
+          <a class="btn btn-outline-secondary flex-fill" href="{% url 'listings:search_results' %}">Reset</a>
+        </div>
+      </div>
+    </div>
+  </form>
+
+  {% if search_suggestions %}
+    <div class="card border-0 bg-light mb-3">
+      <div class="card-body py-3">
+        <div class="small text-muted mb-2">Suggestions</div>
+        <div class="d-flex flex-wrap gap-2">
+          {% for suggestion in search_suggestions %}
+            <a class="btn btn-sm btn-outline-dark" href="{{ suggestion.url }}">
+              {{ suggestion.label }}
+              <span class="text-muted">· {{ suggestion.hint }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if query_chips %}
+    <div class="mb-3">
+      {% for chip in query_chips %}
+        <span class="badge text-bg-light border me-1">{{ chip.label }}: {{ chip.value }}</span>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <p class="text-muted">{{ result_count }} result{{ result_count|pluralize }} · Sorted by {{ active_sort_label }}</p>
 
   {% if items %}
-<div class="row g-3">
-
+    <div class="row g-3">
       {% for item in items %}
-<div class="col-md-4">
-<div class="card h-100">
-<div class="card-body">
-<h5 class="card-title">{{ item.title }}</h5>
-<p class="card-text text-muted mb-1">{{ item.category.name }} • {{ item.location.name }}</p>
-<p class="card-text"><small>{{ item.event_date|date:"M d, Y H:i" }}</small></p>
-<a href="{% url 'listings:item_detail_public' item.id %}" class="btn btn-outline-primary btn-sm">View details</a>
-</div>
-</div>
-</div>
-
+        <div class="col-md-4">
+          <div class="card h-100">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                <h5 class="card-title mb-0">{{ item.title }}</h5>
+                <span class="badge text-bg-light border">{{ item.get_status_display }}</span>
+              </div>
+              <p class="card-text text-muted mb-1">{{ item.category.name }} • {{ item.location.name }}</p>
+              <p class="card-text small mb-3">{{ item.event_date|date:"M d, Y H:i" }}</p>
+              <a href="{% url 'listings:item_detail_public' item.id %}" class="btn btn-outline-primary btn-sm">View details</a>
+            </div>
+          </div>
+        </div>
       {% endfor %}
-</div>
+    </div>
 
     <nav class="mt-4">
-<ul class="pagination">
-
+      <ul class="pagination">
         {% if page_obj.has_previous %}
-<li class="page-item">
-<a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ filters.q }}&category={{ filters.category }}&location={{ filters.location }}&status={{ filters.status }}&sort={{ filters.sort }}">Previous</a>
-</li>
-
+          <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">Previous</a>
+          </li>
         {% endif %}
 
         <li class="page-item disabled">
-<span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-</li>
+          <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+        </li>
 
         {% if page_obj.has_next %}
-<li class="page-item">
-<a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ filters.q }}&category={{ filters.category }}&location={{ filters.location }}&status={{ filters.status }}&sort={{ filters.sort }}">Next</a>
-</li>
-
+          <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if pagination_query %}&{{ pagination_query }}{% endif %}">Next</a>
+          </li>
         {% endif %}
-</ul>
-</nav>
-
+      </ul>
+    </nav>
   {% else %}
-<div class="alert alert-light border">No results found.</div>
-
+    <div class="alert alert-light border">No results found.</div>
   {% endif %}
 </div>
 

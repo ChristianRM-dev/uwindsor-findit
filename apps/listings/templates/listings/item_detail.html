@@ -57,6 +57,21 @@
 
           {% if is_owner %}
             <div class="d-grid gap-2">
+              {% if approved_claim_url %}
+                <a href="{{ approved_claim_url }}" class="btn btn-outline-primary">
+                  <i class="bi bi-file-earmark-text me-1"></i> View Approved Claim
+                </a>
+              {% endif %}
+
+              {% if can_confirm_return and confirm_return_url %}
+                <form method="post" action="{{ confirm_return_url }}">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-success w-100">
+                    <i class="bi bi-check2-circle me-1"></i> Confirm Return
+                  </button>
+                </form>
+              {% endif %}
+
               <a href="{{ edit_url }}" class="btn btn-outline-secondary">
                 <i class="bi bi-pencil-square me-1"></i> Edit Item
               </a>
@@ -72,6 +87,12 @@
                 <i class="bi bi-trash me-1"></i> Delete Item
               </button>
             </div>
+
+            {% if item.status == "RETURNED" and approved_claim %}
+              <div class="alert alert-success mt-3 mb-0">
+                Return confirmed for this item. Claim #CLM-{{ approved_claim.id|stringformat:"04d" }} is complete.
+              </div>
+            {% endif %}
 
           {% elif is_guest %}
             <div class="alert alert-info">

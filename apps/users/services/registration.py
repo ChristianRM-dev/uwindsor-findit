@@ -32,8 +32,8 @@ def try_authenticate_user(request, user, raw_password: str):
 def handle_post_registration(request, user, raw_password: str):
     """
     Returns a dict describing next action after registration.
-    - If verification required: sends email and returns {"verified_required": True}
-    - Else: returns {"verified_required": False, "authed_user": <User|None>}
+    - If verification required: sends email and returns {"verification_required": True}
+    - Else: returns {"verification_required": False, "authed_user": <User|None>}
     """
     if require_email_verification():
         send_verification_email(request, user)

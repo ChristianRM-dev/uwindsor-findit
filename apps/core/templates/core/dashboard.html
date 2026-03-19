@@ -15,7 +15,7 @@
     </div>
 
     <div class="row g-3 mb-4">
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:report_lost_item' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">Report Lost Item</h2>
@@ -23,7 +23,15 @@
           </div>
         </a>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
+        <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:report_found_item' %}">
+          <div class="card-body">
+            <h2 class="h6 mb-2">Report Found Item</h2>
+            <p class="small text-muted mb-0">Create a new found item report.</p>
+          </div>
+        </a>
+      </div>
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:my_items' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">My Items</h2>
@@ -31,7 +39,7 @@
           </div>
         </a>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:my_claims' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">My Claims</h2>
@@ -39,13 +47,40 @@
           </div>
         </a>
       </div>
-      <div class="col-12 col-md-6 col-lg-3">
+      <div class="col-12 col-md-6 col-lg-4 col-xl">
         <a class="card h-100 text-decoration-none text-dark" href="{% url 'listings:my_received_claims' %}">
           <div class="card-body">
             <h2 class="h6 mb-2">Claims Received</h2>
             <p class="small text-muted mb-0">{{ pending_received_claims }} pending review(s).</p>
           </div>
         </a>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header bg-white">
+        <h2 class="h6 mb-0">Recent Activity</h2>
+      </div>
+      <div class="card-body">
+        {% if recent_activities %}
+          <div class="list-group list-group-flush">
+            {% for activity in recent_activities %}
+              <div class="list-group-item px-0">
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                  <div>
+                    <div class="fw-semibold">{{ activity.display_title }}</div>
+                    {% if activity.display_detail %}
+                      <div class="small text-muted">{{ activity.display_detail }}</div>
+                    {% endif %}
+                  </div>
+                  <div class="small text-muted">{{ activity.created_at|date:"M d, Y g:i A" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">No activity yet. Your searches, item views, claims, and messages will appear here.</p>
+        {% endif %}
       </div>
     </div>
 

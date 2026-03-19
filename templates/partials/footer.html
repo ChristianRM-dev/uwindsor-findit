@@ -9,11 +9,11 @@
       </div>
 
       <div class="col-6 col-md-4">
-        <div class="fw-semibold mb-2">Links</div>
+      <div class="fw-semibold mb-2">Links</div>
         <ul class="list-unstyled mb-0">
-          <li><a class="link-secondary text-decoration-none" href="/about/">About</a></li>
-          <li><a class="link-secondary text-decoration-none" href="/faq/">FAQ</a></li>
-          <li><a class="link-secondary text-decoration-none" href="/contact/">Contact</a></li>
+          <li><a class="link-secondary text-decoration-none" href="{% url 'core:about' %}">About</a></li>
+          <li><a class="link-secondary text-decoration-none" href="{% url 'listings:faq' %}">FAQ</a></li>
+          <li><a class="link-secondary text-decoration-none" href="{% url 'core:contact' %}">Contact</a></li>
         </ul>
       </div>
 

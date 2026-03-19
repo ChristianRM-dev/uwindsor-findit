@@ -12,6 +12,8 @@ from apps.chat.services import (
     mark_conversation_as_read,
     send_message,
 )
+from apps.core.models import UserActivity
+from apps.core.services import track_activity
 from apps.listings.models import Item
 
 
@@ -36,6 +38,15 @@ def contact_owner_view(request: HttpRequest, item_id: int) -> HttpResponse:
             conversation=conversation,
             sender=request.user,
             content=form.cleaned_data["message"],
+        )
+        track_activity(
+            request,
+            UserActivity.ActivityType.MESSAGE,
+            item=item,
+            metadata={
+                "conversation_id": conversation.id,
+                "context": "contact_owner",
+            },
         )
         messages.success(request, "Message sent successfully.")
         return redirect("chat:message_thread", conversation_id=conversation.pk)
@@ -101,6 +112,15 @@ def message_thread_view(request: HttpRequest, conversation_id: int) -> HttpRespo
                 conversation=conversation,
                 sender=request.user,
                 content=form.cleaned_data["message"],
+            )
+            track_activity(
+                request,
+                UserActivity.ActivityType.MESSAGE,
+                item=conversation.item,
+                metadata={
+                    "conversation_id": conversation.id,
+                    "context": "thread_reply",
+                },
             )
             messages.success(request, "Reply sent.")
             return redirect("chat:message_thread", conversation_id=conversation.pk)

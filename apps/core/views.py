@@ -1,10 +1,15 @@
-from django.contrib.auth.decorators import login_required
 from datetime import datetime
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import render
-from django.urls import reverse
 from types import SimpleNamespace
 
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.views.decorators.http import require_POST
+
+from apps.core.models import Notification, UserActivity
+from apps.core.services import mark_all_notifications_as_read, track_activity
 from apps.listings.models import Claim, Item
 
 def home_view(request: HttpRequest) -> HttpResponse:
@@ -17,6 +22,11 @@ def home_view(request: HttpRequest) -> HttpResponse:
         "recent_lost_items": base_items_qs.filter(status=Item.Status.LOST).order_by("-created_at")[:4],
         "recent_found_items": base_items_qs.filter(status=Item.Status.FOUND).order_by("-created_at")[:4],
     }
+    track_activity(
+        request,
+        UserActivity.ActivityType.PAGE_VIEW,
+        metadata={"page": "home"},
+    )
     return render(request, "core/home.html", context)
 
 def components_demo_view(request: HttpRequest) -> HttpResponse:
@@ -60,6 +70,11 @@ def components_demo_view(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def dashboard_view(request: HttpRequest) -> HttpResponse:
+    recent_activities = (
+        UserActivity.objects.filter(user=request.user)
+        .select_related("item")
+        .order_by("-created_at")[:6]
+    )
     pending_received_claims = Claim.objects.filter(
         item__reporter=request.user,
         status=Claim.Status.PENDING,
@@ -74,12 +89,81 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         "pending_received_claims": pending_received_claims,
         "my_pending_claims": my_pending_claims,
         "my_items_count": my_items_count,
+        "recent_activities": recent_activities,
         "breadcrumb_items": [
             {"label": "Home", "url": reverse("core:home"), "active": False},
             {"label": "Dashboard", "url": None, "active": True},
         ],
     }
+    track_activity(
+        request,
+        UserActivity.ActivityType.PAGE_VIEW,
+        metadata={"page": "dashboard"},
+    )
     return render(request, "core/dashboard.html", context)
+
+
+def about_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "About", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/about.html", context)
+
+
+def contact_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Contact", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/contact.html", context)
+
+
+@login_required
+def notifications_view(request: HttpRequest) -> HttpResponse:
+    notifications = (
+        Notification.objects.filter(recipient=request.user)
+        .select_related("item", "claim")
+        .order_by("-created_at")
+    )
+    context = {
+        "notifications": notifications,
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "Notifications", "url": None, "active": True},
+        ],
+    }
+    track_activity(
+        request,
+        UserActivity.ActivityType.PAGE_VIEW,
+        metadata={"page": "notifications"},
+    )
+    return render(request, "core/notifications.html", context)
+
+
+@login_required
+@require_POST
+def notifications_mark_all_read_view(request: HttpRequest) -> HttpResponse:
+    updated_count = mark_all_notifications_as_read(user=request.user)
+    if updated_count:
+        messages.success(request, f"Marked {updated_count} notification(s) as read.")
+    else:
+        messages.info(request, "No unread notifications right now.")
+    return redirect("core:notifications")
+
 
 def custom_404_view(request, exception):
     return render(request, "404.html", status=404)
+
+
+def custom_403_view(request, exception):
+    return render(request, "403.html", status=403)
+
+
+def custom_500_view(request):
+    return render(request, "500.html", status=500)

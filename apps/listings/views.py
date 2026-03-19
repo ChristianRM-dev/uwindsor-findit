@@ -1,15 +1,37 @@
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Case, Count, IntegerField, Max, Q, Value, When
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
+from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
 
-from apps.listings.forms import ClaimCreateForm, ReportLostItemForm, ItemEditForm
+from apps.core.models import UserActivity
+from apps.core.services import notify_claim_reviewed, notify_claim_submitted, notify_item_returned, track_activity
+from apps.listings.forms import (
+    ClaimCreateForm,
+    ClaimReviewForm,
+    ItemEditForm,
+    ReportFoundItemForm,
+    ReportLostItemForm,
+)
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item
 from apps.listings.models import ItemImage
+from apps.listings.services import ClaimReviewError, ReturnConfirmationError, confirm_claim_return, review_claim
+
+SEARCH_SORT_OPTIONS = (
+    ("relevance", "Most relevant"),
+    ("newest", "Newest first"),
+    ("oldest", "Oldest first"),
+    ("event_date_desc", "Most recent event date"),
+    ("event_date_asc", "Oldest event date"),
+)
+SEARCH_SORT_LABELS = dict(SEARCH_SORT_OPTIONS)
 
 def _build_claim_proof_entries(proofs):
     image_extensions = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg")
@@ -79,12 +101,215 @@ def _parse_claim_description(description: str):
     return parsed
 
 
+def _build_report_page_context(*, form, item_type: str):
+    item_label = "Found" if item_type == Item.ItemType.FOUND else "Lost"
+    action_label = "found" if item_type == Item.ItemType.FOUND else "lost"
+
+    return {
+        "form": form,
+        "cancel_url": reverse("core:dashboard"),
+        "page_title": f"Report a {item_label} Item",
+        "page_subtitle": f"Provide as many details as possible to help others identify what you {action_label}.",
+        "submit_label": "Submit Report",
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": f"Report {item_label} Item", "url": None, "active": True},
+        ],
+    }
+
+
+def _user_can_review_claim(user, claim: Claim) -> bool:
+    return user.is_staff or claim.item.reporter_id == user.id
+
+
+def _user_can_confirm_return(user, claim: Claim) -> bool:
+    return (
+        _user_can_review_claim(user, claim)
+        and claim.status == Claim.Status.APPROVED
+        and claim.item.status == Item.Status.CLAIMED
+        and claim.item.claimed_by_id == claim.claimant_id
+    )
+
+
+def _build_claim_detail_context(request, claim: Claim, *, review_form=None):
+    proof_entries = _build_claim_proof_entries(claim.proofs.all())
+    image_proofs = [entry for entry in proof_entries if entry["is_image"]]
+    non_image_proofs = [entry for entry in proof_entries if not entry["is_image"]]
+
+    if claim.claimant_id == request.user.id:
+        parent_label = "My Claims"
+        parent_url = reverse("listings:my_claims")
+    elif claim.item.reporter_id == request.user.id:
+        parent_label = "Claims Received"
+        parent_url = reverse("listings:my_received_claims")
+    else:
+        parent_label = "Dashboard"
+        parent_url = reverse("core:dashboard")
+
+    can_review_claim = _user_can_review_claim(request.user, claim)
+    can_confirm_return = _user_can_confirm_return(request.user, claim)
+
+    return {
+        "claim": claim,
+        "proofs": proof_entries,
+        "image_proofs": image_proofs,
+        "non_image_proofs": non_image_proofs,
+        "parsed_claim": _parse_claim_description(claim.description),
+        "can_review_claim": can_review_claim,
+        "can_confirm_return": can_confirm_return,
+        "show_review_form": can_review_claim and claim.status == Claim.Status.PENDING,
+        "review_form": review_form or ClaimReviewForm(),
+        "review_url": reverse("listings:claim_review", kwargs={"claim_id": claim.id}),
+        "confirm_return_url": reverse("listings:claim_confirm_return", kwargs={"claim_id": claim.id}),
+        "item_details_url": reverse("listings:item_detail_public", kwargs={"pk": claim.item_id}),
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": parent_label, "url": parent_url, "active": False},
+            {"label": f"Claim #{claim.id}", "url": None, "active": True},
+        ],
+    }
+
+
+def _search_url_for_params(**params) -> str:
+    cleaned_params = {
+        key: value
+        for key, value in params.items()
+        if value not in ("", None)
+    }
+    base_url = reverse("listings:search_results")
+    if not cleaned_params:
+        return base_url
+    return f"{base_url}?{urlencode(cleaned_params)}"
+
+
+def _build_search_relevance_score(query: str):
+    return (
+        Case(
+            When(title__iexact=query, then=Value(120)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(title__istartswith=query, then=Value(90)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(title__icontains=query, then=Value(60)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(description__icontains=query, then=Value(25)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(category__name__icontains=query, then=Value(15)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+        + Case(
+            When(location__name__icontains=query, then=Value(10)),
+            default=Value(0),
+            output_field=IntegerField(),
+        )
+    )
+
+
+def _build_search_suggestions(query: str):
+    search_term = query.strip()
+    if not search_term:
+        return []
+
+    suggestions = []
+    seen = set()
+
+    title_matches = (
+        Item.objects.filter(is_visible=True, title__icontains=search_term)
+        .order_by("-created_at")
+        .select_related("category")
+    )
+    for item in title_matches:
+        key = ("title", item.title.lower())
+        if key in seen:
+            continue
+        suggestions.append(
+            {
+                "label": item.title,
+                "hint": "Matching item title",
+                "url": _search_url_for_params(q=item.title, sort="relevance"),
+            }
+        )
+        seen.add(key)
+        if len(suggestions) >= 3:
+            break
+
+    category_matches = Category.objects.filter(is_active=True, name__icontains=search_term).order_by("name")[:2]
+    for category in category_matches:
+        key = ("category", category.slug)
+        if key in seen:
+            continue
+        suggestions.append(
+            {
+                "label": category.name,
+                "hint": "Filter by category",
+                "url": _search_url_for_params(category=category.slug, sort="newest"),
+            }
+        )
+        seen.add(key)
+
+    location_matches = CampusLocation.objects.filter(is_active=True, name__icontains=search_term).order_by("name")[:2]
+    for location in location_matches:
+        key = ("location", location.code)
+        if key in seen:
+            continue
+        suggestions.append(
+            {
+                "label": location.name,
+                "hint": "Filter by location",
+                "url": _search_url_for_params(location=location.code, sort="newest"),
+            }
+        )
+        seen.add(key)
+
+    return suggestions[:6]
+
+
+def _get_trending_categories():
+    return (
+        Category.objects.filter(is_active=True, items__is_visible=True)
+        .annotate(
+            visible_item_count=Count(
+                "items",
+                filter=Q(items__is_visible=True),
+                distinct=True,
+            )
+        )
+        .filter(visible_item_count__gt=0)
+        .order_by("-visible_item_count", "name")[:5]
+    )
+
+
 def search_results_view(request):
     q = (request.GET.get("q") or "").strip()
     category_slug = (request.GET.get("category") or "").strip()
     location_code = (request.GET.get("location") or "").strip()
     status = (request.GET.get("status") or "").strip()
-    sort = (request.GET.get("sort") or "newest").strip()
+    requested_sort = (request.GET.get("sort") or "newest").strip()
+    date_from_raw = (request.GET.get("date_from") or "").strip()
+    date_to_raw = (request.GET.get("date_to") or "").strip()
+    date_from = parse_date(date_from_raw) if date_from_raw else None
+    date_to = parse_date(date_to_raw) if date_to_raw else None
+    selected_category = Category.objects.filter(is_active=True, slug=category_slug).first() if category_slug else None
+    selected_location = CampusLocation.objects.filter(is_active=True, code=location_code).first() if location_code else None
+    sort = requested_sort if requested_sort in SEARCH_SORT_LABELS else "newest"
+    if sort == "event_date":
+        sort = "event_date_desc"
+    if sort == "relevance" and not q:
+        sort = "newest"
 
     items_qs = (
         Item.objects.filter(is_visible=True)
@@ -102,11 +327,21 @@ def search_results_view(request):
         items_qs = items_qs.filter(location__code=location_code)
     if status:
         items_qs = items_qs.filter(status=status)
+    if date_from:
+        items_qs = items_qs.filter(event_date__date__gte=date_from)
+    if date_to:
+        items_qs = items_qs.filter(event_date__date__lte=date_to)
 
-    if sort == "oldest":
+    if sort == "relevance":
+        items_qs = items_qs.annotate(
+            relevance_score=_build_search_relevance_score(q)
+        ).order_by("-relevance_score", "-event_date", "-created_at")
+    elif sort == "oldest":
         items_qs = items_qs.order_by("created_at")
-    elif sort == "event_date":
+    elif sort == "event_date_desc":
         items_qs = items_qs.order_by("-event_date")
+    elif sort == "event_date_asc":
+        items_qs = items_qs.order_by("event_date")
     else:
         items_qs = items_qs.order_by("-created_at")
 
@@ -117,17 +352,46 @@ def search_results_view(request):
     if q:
         query_chips.append({"label": "q", "value": q})
     if category_slug:
-        query_chips.append({"label": "category", "value": category_slug})
+        query_chips.append({"label": "category", "value": selected_category.name if selected_category else category_slug})
     if location_code:
-        query_chips.append({"label": "location", "value": location_code})
+        query_chips.append({"label": "location", "value": selected_location.name if selected_location else location_code})
     if status:
         query_chips.append({"label": "status", "value": status})
+    if date_from_raw:
+        query_chips.append({"label": "from", "value": date_from_raw})
+    if date_to_raw:
+        query_chips.append({"label": "to", "value": date_to_raw})
+    if sort != "newest":
+        query_chips.append({"label": "sort", "value": SEARCH_SORT_LABELS.get(sort, sort)})
+
+    search_suggestions = _build_search_suggestions(q)
+    pagination_query = urlencode(
+        {
+            key: value
+            for key, value in {
+                "q": q,
+                "category": category_slug,
+                "location": location_code,
+                "status": status,
+                "sort": sort,
+                "date_from": date_from_raw,
+                "date_to": date_to_raw,
+            }.items()
+            if value not in ("", None)
+        }
+    )
 
     context = {
         "page_obj": page_obj,
         "items": page_obj.object_list,
         "categories": Category.objects.filter(is_active=True),
         "locations": CampusLocation.objects.filter(is_active=True),
+        "trending_categories": _get_trending_categories(),
+        "search_suggestions": search_suggestions,
+        "search_hint_values": [suggestion["label"] for suggestion in search_suggestions],
+        "sort_options": SEARCH_SORT_OPTIONS,
+        "active_sort_label": SEARCH_SORT_LABELS.get(sort, "Newest first"),
+        "pagination_query": pagination_query,
         "query_chips": query_chips,
         "filters": {
             "q": q,
@@ -135,16 +399,54 @@ def search_results_view(request):
             "location": location_code,
             "status": status,
             "sort": sort,
+            "date_from": date_from_raw,
+            "date_to": date_to_raw,
         },
         "result_count": paginator.count,
     }
+
+    has_search_filters = any(
+        [
+            q,
+            category_slug,
+            location_code,
+            status,
+            date_from_raw,
+            date_to_raw,
+            sort != "newest",
+            request.GET.get("page"),
+        ]
+    )
+    if has_search_filters:
+        track_activity(
+            request,
+            UserActivity.ActivityType.SEARCH,
+            search_query=q,
+            metadata={
+                "category": selected_category.name if selected_category else "",
+                "category_slug": category_slug,
+                "location": selected_location.name if selected_location else "",
+                "location_code": location_code,
+                "status": status,
+                "sort": sort,
+                "date_from": date_from_raw,
+                "date_to": date_to_raw,
+                "result_count": paginator.count,
+            },
+        )
+    else:
+        track_activity(
+            request,
+            UserActivity.ActivityType.PAGE_VIEW,
+            metadata={"page": "search"},
+        )
     return render(request, "listings/search_results.html", context)
 
 
 def item_detail_view(request, pk: int):
     item = get_object_or_404(
         Item.objects.filter(is_visible=True)
-        .select_related("category", "location", "reporter")
+        .select_related("category", "location", "reporter", "claimed_by")
         .prefetch_related("images"),
         pk=pk,
     )
@@ -163,6 +465,18 @@ def item_detail_view(request, pk: int):
                 claim_url = None
     login_url = reverse("users:login")
     register_url = reverse("users:register")
+    approved_claim = None
+    if item.status in {Item.Status.CLAIMED, Item.Status.RETURNED} and item.claimed_by_id:
+        approved_claim = (
+            item.claims.select_related("claimant")
+            .filter(status=Claim.Status.APPROVED, claimant_id=item.claimed_by_id)
+            .first()
+        )
+    can_confirm_return = bool(
+        approved_claim
+        and request.user.is_authenticated
+        and _user_can_confirm_return(request.user, approved_claim)
+    )
 
     context = {
         "item": item,
@@ -176,7 +490,21 @@ def item_detail_view(request, pk: int):
         "is_owner": request.user.is_authenticated and item.reporter_id == request.user.id,
         "edit_url": reverse("listings:item_edit", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
         "delete_url": reverse("listings:item_delete", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
+        "approved_claim": approved_claim,
+        "approved_claim_url": reverse("listings:claim_detail", kwargs={"claim_id": approved_claim.id}) if approved_claim else None,
+        "confirm_return_url": reverse("listings:claim_confirm_return", kwargs={"claim_id": approved_claim.id}) if can_confirm_return else None,
+        "can_confirm_return": can_confirm_return,
     }
+    track_activity(
+        request,
+        UserActivity.ActivityType.ITEM_VIEW,
+        item=item,
+        metadata={
+            "status": item.status,
+            "item_type": item.item_type,
+            "is_owner": request.user.is_authenticated and item.reporter_id == request.user.id,
+        },
+    )
     return render(request, "listings/item_detail.html", context)
 
 
@@ -199,17 +527,56 @@ def report_lost_item_view(request):
                     uploaded_by=request.user,
                 )
 
+        track_activity(
+            request,
+            UserActivity.ActivityType.ITEM_REPORT,
+            item=item,
+            metadata={
+                "item_type": item.item_type,
+                "status": item.status,
+                "photo_count": item.images.count(),
+            },
+        )
+
         return redirect(reverse("listings:item_detail_public", kwargs={"pk": item.pk}))
 
-    context = {
-        "form": form,
-        "cancel_url": reverse("core:dashboard"),
-        "breadcrumb_items": [
-            {"label": "Home", "url": reverse("core:home"), "active": False},
-            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
-            {"label": "Report Lost Item", "url": None, "active": True},
-        ],
-    }
+    context = _build_report_page_context(form=form, item_type=Item.ItemType.LOST)
+    return render(request, "listings/report_lost_item.html", context)
+
+
+@login_required
+def report_found_item_view(request):
+    form = ReportFoundItemForm(request.POST or None, request.FILES or None)
+
+    if request.method == "POST" and form.is_valid():
+        with transaction.atomic():
+            item = form.save(commit=False)
+            item.reporter = request.user
+            item.item_type = Item.ItemType.FOUND
+            item.status = Item.Status.FOUND
+            item.save()
+
+            for photo in request.FILES.getlist("photos")[: ReportFoundItemForm.max_files]:
+                ItemImage.objects.create(
+                    item=item,
+                    image=photo,
+                    uploaded_by=request.user,
+                )
+
+        track_activity(
+            request,
+            UserActivity.ActivityType.ITEM_REPORT,
+            item=item,
+            metadata={
+                "item_type": item.item_type,
+                "status": item.status,
+                "photo_count": item.images.count(),
+            },
+        )
+
+        return redirect(reverse("listings:item_detail_public", kwargs={"pk": item.pk}))
+
+    context = _build_report_page_context(form=form, item_type=Item.ItemType.FOUND)
     return render(request, "listings/report_lost_item.html", context)
 
 
@@ -257,6 +624,19 @@ def claim_create_view(request, item_id: int):
                             claim=claim,
                             file=uploaded_file,
                         )
+
+                notify_claim_submitted(claim=claim)
+
+                track_activity(
+                    request,
+                    UserActivity.ActivityType.CLAIM_SUBMISSION,
+                    item=item,
+                    metadata={
+                        "claim_id": claim.id,
+                        "relationship_to_item": form.cleaned_data["relationship_to_item"],
+                        "proof_count": claim.proofs.count(),
+                    },
+                )
 
                 return redirect("listings:my_claims")
     else:
@@ -423,7 +803,11 @@ def my_items_view(request):
                 "claims",
                 filter=Q(claims__status=Claim.Status.PENDING),
                 distinct=True,
-            )
+            ),
+            approved_claim_id=Max(
+                "claims__id",
+                filter=Q(claims__status=Claim.Status.APPROVED),
+            ),
         )
         .order_by("-created_at")
     )
@@ -459,7 +843,14 @@ def item_edit_view(request, pk: int):
 
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
-            updated_item = form.save()
+            updated_item = form.save(commit=False)
+            if updated_item.status in {Item.Status.LOST, Item.Status.FOUND}:
+                updated_item.claimed_by = None
+            updated_item.save()
+            form.save_m2m()
+
+            for image in form.cleaned_data["remove_images"]:
+                image.delete()
 
             for photo in request.FILES.getlist("photos")[: ItemEditForm.max_files]:
                 ItemImage.objects.create(
@@ -524,10 +915,11 @@ def faq_view(request):
     }
     return render(request, "listings/faq.html", context)
 
+
 @login_required
 def claim_detail_view(request, claim_id: int):
     claim = get_object_or_404(
-        Claim.objects.select_related("item", "claimant", "item__reporter").prefetch_related("proofs"),
+        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer").prefetch_related("proofs"),
         pk=claim_id,
     )
 
@@ -539,32 +931,86 @@ def claim_detail_view(request, claim_id: int):
     if not can_view:
         raise Http404("Claim not found.")
 
-    proof_entries = _build_claim_proof_entries(claim.proofs.all())
-    image_proofs = [entry for entry in proof_entries if entry["is_image"]]
-    non_image_proofs = [entry for entry in proof_entries if not entry["is_image"]]
-
-    if claim.claimant_id == request.user.id:
-        parent_label = "My Claims"
-        parent_url = reverse("listings:my_claims")
-    elif claim.item.reporter_id == request.user.id:
-        parent_label = "Claims Received"
-        parent_url = reverse("listings:my_received_claims")
-    else:
-        parent_label = "Dashboard"
-        parent_url = reverse("core:dashboard")
-
-    context = {
-        "claim": claim,
-        "proofs": proof_entries,
-        "image_proofs": image_proofs,
-        "non_image_proofs": non_image_proofs,
-        "parsed_claim": _parse_claim_description(claim.description),
-        "item_details_url": reverse("listings:item_detail_public", kwargs={"pk": claim.item_id}),
-        "breadcrumb_items": [
-            {"label": "Home", "url": reverse("core:home"), "active": False},
-            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
-            {"label": parent_label, "url": parent_url, "active": False},
-            {"label": f"Claim #{claim.id}", "url": None, "active": True},
-        ],
-    }
+    context = _build_claim_detail_context(request, claim)
     return render(request, "listings/claim_detail.html", context)
+
+
+@login_required
+def claim_review_view(request, claim_id: int):
+    claim = get_object_or_404(
+        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer").prefetch_related("proofs"),
+        pk=claim_id,
+    )
+
+    if not _user_can_review_claim(request.user, claim):
+        raise Http404("Claim not found.")
+
+    if request.method != "POST":
+        return redirect("listings:claim_detail", claim_id=claim.id)
+
+    if claim.status != Claim.Status.PENDING:
+        messages.info(request, "This claim has already been reviewed.")
+        return redirect("listings:claim_detail", claim_id=claim.id)
+
+    review_form = ClaimReviewForm(request.POST)
+    if not review_form.is_valid():
+        context = _build_claim_detail_context(request, claim, review_form=review_form)
+        return render(request, "listings/claim_detail.html", context, status=200)
+
+    decision = review_form.cleaned_data["decision"]
+    reviewer_notes = review_form.cleaned_data["reviewer_notes"]
+
+    try:
+        review_result = review_claim(
+            claim=claim,
+            reviewer=request.user,
+            decision=decision,
+            reviewer_notes=reviewer_notes,
+        )
+    except ClaimReviewError as exc:
+        messages.error(request, str(exc))
+        return redirect("listings:claim_detail", claim_id=claim.id)
+
+    notify_claim_reviewed(claim=review_result.claim)
+    for auto_rejected_claim in review_result.auto_rejected_claims:
+        notify_claim_reviewed(claim=auto_rejected_claim, auto_closed=True)
+
+    track_activity(
+        request,
+        UserActivity.ActivityType.CLAIM_REVIEW,
+        item=claim.item,
+        metadata={
+            "claim_id": claim.id,
+            "decision": decision,
+            "via": "claim_detail",
+        },
+    )
+
+    if decision == ClaimReviewForm.DECISION_APPROVE:
+        messages.success(request, "Claim approved. The item is now marked as claimed.")
+    else:
+        messages.success(request, "Claim rejected.")
+
+    return redirect("listings:claim_detail", claim_id=claim.id)
+
+
+@login_required
+@require_POST
+def claim_confirm_return_view(request, claim_id: int):
+    claim = get_object_or_404(
+        Claim.objects.select_related("item", "claimant", "item__reporter"),
+        pk=claim_id,
+    )
+
+    if not _user_can_review_claim(request.user, claim):
+        raise Http404("Claim not found.")
+
+    try:
+        confirmed_claim = confirm_claim_return(claim=claim, actor=request.user)
+    except ReturnConfirmationError as exc:
+        messages.error(request, str(exc))
+        return redirect("listings:claim_detail", claim_id=claim.id)
+
+    notify_item_returned(claim=confirmed_claim)
+    messages.success(request, "Return confirmed. The item is now marked as returned.")
+    return redirect("listings:claim_detail", claim_id=claim.id)

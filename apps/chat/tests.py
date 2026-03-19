@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.chat.models import Conversation, Message
+from apps.core.models import UserActivity
 from apps.listings.models import CampusLocation, Category, Item
 
 
@@ -59,6 +60,14 @@ class ChatViewsTests(TestCase):
         self.assertEqual(conversation.participants.count(), 2)
         self.assertEqual(conversation.messages.count(), 1)
         self.assertEqual(conversation.messages.first().sender, self.sender)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.sender,
+                activity_type=UserActivity.ActivityType.MESSAGE,
+                item=self.item,
+                metadata__context="contact_owner",
+            ).exists()
+        )
 
     def test_message_thread_marks_unread_messages_as_read(self):
         conversation = Conversation.objects.create(item=self.item, created_by=self.sender)
@@ -91,6 +100,14 @@ class ChatViewsTests(TestCase):
         self.assertRedirects(response, reverse("chat:message_thread", kwargs={"conversation_id": conversation.pk}))
         self.assertTrue(
             conversation.messages.filter(content="It also has a silver Dell laptop inside.", sender=self.sender).exists()
+        )
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.sender,
+                activity_type=UserActivity.ActivityType.MESSAGE,
+                item=self.item,
+                metadata__context="thread_reply",
+            ).exists()
         )
 
     def test_navbar_bell_shows_unread_count(self):
