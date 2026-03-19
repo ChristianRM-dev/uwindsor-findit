@@ -8,8 +8,7 @@ services:
     autoDeployTrigger: checksPass
     healthCheckPath: /health/
     buildCommand: pip install -r requirements/prod.txt && python manage.py collectstatic --noinput
-    preDeployCommand: python manage.py migrate && python manage.py seed_minimal_catalogs && python manage.py seed_message_demo
-    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:$PORT
+    startCommand: ./scripts/render-start.sh
     envVars:
       - key: DJANGO_SECRET_KEY
         generateValue: true
