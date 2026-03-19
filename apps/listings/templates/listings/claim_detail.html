@@ -43,6 +43,8 @@
               <span class="badge bg-secondary">{{ claim.get_status_display }}</span>
             {% endif %}
             <p class="small text-muted mt-2 mb-0">Last updated: {{ claim.updated_at|date:"M d, Y" }}</p>
+            <div class="small text-muted mt-3">Item lifecycle</div>
+            <div class="fw-semibold">{{ claim.item.get_status_display }}</div>
 
             {% if claim.reviewed_at %}
               <hr>
@@ -57,6 +59,35 @@
             {% endif %}
           </div>
         </div>
+
+        {% if can_confirm_return %}
+          <div class="card mt-3">
+            <div class="card-header bg-white">
+              <h2 class="h6 mb-0">Complete return</h2>
+            </div>
+            <div class="card-body">
+              <p class="small text-muted">
+                Confirm this after the item has been physically handed back to the approved claimant.
+              </p>
+              <form method="post" action="{{ confirm_return_url }}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">Confirm Return</button>
+              </form>
+            </div>
+          </div>
+        {% elif claim.status == "APPROVED" and claim.item.status == "CLAIMED" %}
+          <div class="alert alert-info mt-3 mb-0">
+            {% if claim.claimant_id == user.id %}
+              Your claim is approved. The reporter or an admin can confirm the item as returned once handoff is complete.
+            {% else %}
+              This item is currently marked as claimed. Confirm return after the handoff is completed.
+            {% endif %}
+          </div>
+        {% elif claim.status == "APPROVED" and claim.item.status == "RETURNED" %}
+          <div class="alert alert-success mt-3 mb-0">
+            The return has been confirmed for this approved claim.
+          </div>
+        {% endif %}
       </div>
 
       <div class="col-lg-7">

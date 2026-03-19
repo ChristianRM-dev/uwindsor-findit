@@ -76,6 +76,24 @@
                         <i class="bi bi-eye me-1"></i> View
                       </a>
 
+                      {% if item.approved_claim_id %}
+                        <a
+                          class="btn btn-outline-primary btn-sm"
+                          href="{% url 'listings:claim_detail' claim_id=item.approved_claim_id %}"
+                        >
+                          <i class="bi bi-file-earmark-text me-1"></i> Claim
+                        </a>
+                      {% endif %}
+
+                      {% if item.status == "CLAIMED" and item.approved_claim_id %}
+                        <form method="post" action="{% url 'listings:claim_confirm_return' claim_id=item.approved_claim_id %}" class="d-inline">
+                          {% csrf_token %}
+                          <button type="submit" class="btn btn-success btn-sm">
+                            <i class="bi bi-check2-circle me-1"></i> Confirm Return
+                          </button>
+                        </form>
+                      {% endif %}
+
                       <a
                         class="btn btn-outline-secondary btn-sm"
                         href="{% url 'listings:item_edit' item.id %}"

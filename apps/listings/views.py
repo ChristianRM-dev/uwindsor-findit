@@ -4,14 +4,15 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.core.paginator import Paginator
-from django.db.models import Case, Count, IntegerField, Q, Value, When
+from django.db.models import Case, Count, IntegerField, Max, Q, Value, When
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
 from django.utils.dateparse import parse_date
+from django.views.decorators.http import require_POST
 
 from apps.core.models import UserActivity
-from apps.core.services import notify_claim_reviewed, notify_claim_submitted, track_activity
+from apps.core.services import notify_claim_reviewed, notify_claim_submitted, notify_item_returned, track_activity
 from apps.listings.forms import (
     ClaimCreateForm,
     ClaimReviewForm,
@@ -21,7 +22,7 @@ from apps.listings.forms import (
 )
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item
 from apps.listings.models import ItemImage
-from apps.listings.services import ClaimReviewError, review_claim
+from apps.listings.services import ClaimReviewError, ReturnConfirmationError, confirm_claim_return, review_claim
 
 SEARCH_SORT_OPTIONS = (
     ("relevance", "Most relevant"),
@@ -122,6 +123,15 @@ def _user_can_review_claim(user, claim: Claim) -> bool:
     return user.is_staff or claim.item.reporter_id == user.id
 
 
+def _user_can_confirm_return(user, claim: Claim) -> bool:
+    return (
+        _user_can_review_claim(user, claim)
+        and claim.status == Claim.Status.APPROVED
+        and claim.item.status == Item.Status.CLAIMED
+        and claim.item.claimed_by_id == claim.claimant_id
+    )
+
+
 def _build_claim_detail_context(request, claim: Claim, *, review_form=None):
     proof_entries = _build_claim_proof_entries(claim.proofs.all())
     image_proofs = [entry for entry in proof_entries if entry["is_image"]]
@@ -138,6 +148,7 @@ def _build_claim_detail_context(request, claim: Claim, *, review_form=None):
         parent_url = reverse("core:dashboard")
 
     can_review_claim = _user_can_review_claim(request.user, claim)
+    can_confirm_return = _user_can_confirm_return(request.user, claim)
 
     return {
         "claim": claim,
@@ -146,9 +157,11 @@ def _build_claim_detail_context(request, claim: Claim, *, review_form=None):
         "non_image_proofs": non_image_proofs,
         "parsed_claim": _parse_claim_description(claim.description),
         "can_review_claim": can_review_claim,
+        "can_confirm_return": can_confirm_return,
         "show_review_form": can_review_claim and claim.status == Claim.Status.PENDING,
         "review_form": review_form or ClaimReviewForm(),
         "review_url": reverse("listings:claim_review", kwargs={"claim_id": claim.id}),
+        "confirm_return_url": reverse("listings:claim_confirm_return", kwargs={"claim_id": claim.id}),
         "item_details_url": reverse("listings:item_detail_public", kwargs={"pk": claim.item_id}),
         "breadcrumb_items": [
             {"label": "Home", "url": reverse("core:home"), "active": False},
@@ -433,7 +446,7 @@ def search_results_view(request):
 def item_detail_view(request, pk: int):
     item = get_object_or_404(
         Item.objects.filter(is_visible=True)
-        .select_related("category", "location", "reporter")
+        .select_related("category", "location", "reporter", "claimed_by")
         .prefetch_related("images"),
         pk=pk,
     )
@@ -452,6 +465,18 @@ def item_detail_view(request, pk: int):
                 claim_url = None
     login_url = reverse("users:login")
     register_url = reverse("users:register")
+    approved_claim = None
+    if item.status in {Item.Status.CLAIMED, Item.Status.RETURNED} and item.claimed_by_id:
+        approved_claim = (
+            item.claims.select_related("claimant")
+            .filter(status=Claim.Status.APPROVED, claimant_id=item.claimed_by_id)
+            .first()
+        )
+    can_confirm_return = bool(
+        approved_claim
+        and request.user.is_authenticated
+        and _user_can_confirm_return(request.user, approved_claim)
+    )
 
     context = {
         "item": item,
@@ -465,6 +490,10 @@ def item_detail_view(request, pk: int):
         "is_owner": request.user.is_authenticated and item.reporter_id == request.user.id,
         "edit_url": reverse("listings:item_edit", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
         "delete_url": reverse("listings:item_delete", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
+        "approved_claim": approved_claim,
+        "approved_claim_url": reverse("listings:claim_detail", kwargs={"claim_id": approved_claim.id}) if approved_claim else None,
+        "confirm_return_url": reverse("listings:claim_confirm_return", kwargs={"claim_id": approved_claim.id}) if can_confirm_return else None,
+        "can_confirm_return": can_confirm_return,
     }
     track_activity(
         request,
@@ -774,7 +803,11 @@ def my_items_view(request):
                 "claims",
                 filter=Q(claims__status=Claim.Status.PENDING),
                 distinct=True,
-            )
+            ),
+            approved_claim_id=Max(
+                "claims__id",
+                filter=Q(claims__status=Claim.Status.APPROVED),
+            ),
         )
         .order_by("-created_at")
     )
@@ -958,4 +991,26 @@ def claim_review_view(request, claim_id: int):
     else:
         messages.success(request, "Claim rejected.")
 
+    return redirect("listings:claim_detail", claim_id=claim.id)
+
+
+@login_required
+@require_POST
+def claim_confirm_return_view(request, claim_id: int):
+    claim = get_object_or_404(
+        Claim.objects.select_related("item", "claimant", "item__reporter"),
+        pk=claim_id,
+    )
+
+    if not _user_can_review_claim(request.user, claim):
+        raise Http404("Claim not found.")
+
+    try:
+        confirmed_claim = confirm_claim_return(claim=claim, actor=request.user)
+    except ReturnConfirmationError as exc:
+        messages.error(request, str(exc))
+        return redirect("listings:claim_detail", claim_id=claim.id)
+
+    notify_item_returned(claim=confirmed_claim)
+    messages.success(request, "Return confirmed. The item is now marked as returned.")
     return redirect("listings:claim_detail", claim_id=claim.id)

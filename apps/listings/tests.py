@@ -990,6 +990,25 @@ class MyItemsViewTests(TestCase):
         self.assertContains(response, "Report Found")
         self.assertContains(response, "Claims Received")
 
+    def test_claimed_item_shows_confirm_return_action(self):
+        approved_claim = Claim.objects.create(
+            item=self.item_2,
+            claimant=self.claimant,
+            description="Approved claim for item 2",
+            status=Claim.Status.APPROVED,
+        )
+        self.item_2.status = Item.Status.CLAIMED
+        self.item_2.claimed_by = self.claimant
+        self.item_2.save(update_fields=["status", "claimed_by"])
+
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("listings:claim_detail", kwargs={"claim_id": approved_claim.pk}))
+        self.assertContains(response, reverse("listings:claim_confirm_return", kwargs={"claim_id": approved_claim.pk}))
+        self.assertContains(response, "Confirm Return")
+
 
 class ClaimDetailViewTests(TestCase):
     def setUp(self):
@@ -1107,6 +1126,37 @@ class ClaimDetailViewTests(TestCase):
         self.assertContains(response, "Reviewed by")
         self.assertContains(response, self.admin_user.username)
         self.assertContains(response, "Claim details match the recovered item.")
+
+    def test_reporter_sees_confirm_return_when_item_is_claimed(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.admin_user
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save(update_fields=["status", "reviewer", "reviewed_at"])
+        self.item.status = Item.Status.CLAIMED
+        self.item.claimed_by = self.claimant
+        self.item.save(update_fields=["status", "claimed_by"])
+
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Complete return")
+        self.assertContains(response, reverse("listings:claim_confirm_return", kwargs={"claim_id": self.claim.pk}))
+
+    def test_claimant_sees_return_complete_message_once_returned(self):
+        self.claim.status = Claim.Status.APPROVED
+        self.claim.reviewer = self.admin_user
+        self.claim.reviewed_at = timezone.now()
+        self.claim.save(update_fields=["status", "reviewer", "reviewed_at"])
+        self.item.status = Item.Status.RETURNED
+        self.item.claimed_by = self.claimant
+        self.item.save(update_fields=["status", "claimed_by"])
+
+        self.client.login(username=self.claimant.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "The return has been confirmed for this approved claim.")
 
 
 class ClaimReviewViewTests(TestCase):
@@ -1357,6 +1407,105 @@ class ClaimReviewViewTests(TestCase):
         self.assertContains(response, "Only items that are still marked as lost can be approved.")
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.status, Claim.Status.PENDING)
+
+
+class ClaimReturnViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.reporter = User.objects.create_user(
+            username="return-owner@uwindsor.ca",
+            email="return-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant = User.objects.create_user(
+            username="return-claimant@uwindsor.ca",
+            email="return-claimant@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.admin_user = User.objects.create_user(
+            username="return-admin@uwindsor.ca",
+            email="return-admin@uwindsor.ca",
+            password="StrongPass123!",
+            is_staff=True,
+        )
+        self.other_user = User.objects.create_user(
+            username="return-other@uwindsor.ca",
+            email="return-other@uwindsor.ca",
+            password="StrongPass123!",
+        )
+
+        self.category = Category.objects.create(name="Return Docs", slug="return-docs", is_active=True)
+        self.location = CampusLocation.objects.create(name="Return Hall", code="return-hall", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.CLAIMED,
+            title="Grey Laptop Sleeve",
+            description="Claimed item waiting for handoff.",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=2),
+            claimed_by=self.claimant,
+            is_visible=True,
+        )
+        self.claim = Claim.objects.create(
+            item=self.item,
+            claimant=self.claimant,
+            description="Approved claim for returned flow.",
+            status=Claim.Status.APPROVED,
+            reviewer=self.reporter,
+            reviewed_at=timezone.now(),
+        )
+        self.url = reverse("listings:claim_confirm_return", kwargs={"claim_id": self.claim.pk})
+        self.detail_url = reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk})
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_reporter_can_confirm_return_and_notify_claimant(self):
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Return confirmed. The item is now marked as returned.")
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.RETURNED)
+        notification = Notification.objects.get(
+            recipient=self.claimant,
+            claim=self.claim,
+            notification_type=Notification.NotificationType.ITEM_RETURNED,
+        )
+        self.assertIn("returned", notification.title.lower())
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_admin_can_confirm_return(self):
+        self.client.login(username=self.admin_user.username, password="StrongPass123!")
+
+        response = self.client.post(self.url)
+
+        self.assertRedirects(response, self.detail_url)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.RETURNED)
+
+    def test_claimant_cannot_confirm_return(self):
+        self.client.login(username=self.claimant.username, password="StrongPass123!")
+
+        response = self.client.post(self.url)
+
+        self.assertEqual(response.status_code, 404)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.CLAIMED)
+
+    def test_cannot_confirm_return_when_item_is_not_claimed(self):
+        self.item.status = Item.Status.LOST
+        self.item.save(update_fields=["status"])
+        self.client.login(username=self.reporter.username, password="StrongPass123!")
+
+        response = self.client.post(self.url, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Only claimed items can be marked as returned.")
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, Item.Status.LOST)
 
 
 class ItemEditViewTests(TestCase):

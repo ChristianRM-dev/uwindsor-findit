@@ -186,3 +186,25 @@ def notify_claim_reviewed(*, claim, auto_closed: bool = False):
         claim=claim,
         email_body=email_body,
     )
+
+
+def notify_item_returned(*, claim):
+    item_title = claim.item.title
+    link_path = reverse("listings:claim_detail", kwargs={"claim_id": claim.id})
+    title = f"Item returned for {item_title}"
+    body = f"The return of {item_title} has been confirmed."
+    email_body = (
+        f"The return of \"{item_title}\" has been confirmed in FindIt.\n\n"
+        f"View the claim details here: {link_path}"
+    )
+
+    return create_notification(
+        recipient=claim.claimant,
+        notification_type=Notification.NotificationType.ITEM_RETURNED,
+        title=title,
+        body=body,
+        link_path=link_path,
+        item=claim.item,
+        claim=claim,
+        email_body=email_body,
+    )

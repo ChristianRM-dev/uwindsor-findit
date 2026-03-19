@@ -15,6 +15,10 @@ class ClaimReviewError(Exception):
     pass
 
 
+class ReturnConfirmationError(Exception):
+    pass
+
+
 @dataclass
 class ClaimReviewResult:
     claim: Claim
@@ -81,3 +85,32 @@ def review_claim(*, claim: Claim, reviewer, decision: str, reviewer_notes: str =
         claim=claim,
         auto_rejected_claims=auto_rejected_claims,
     )
+
+
+@transaction.atomic
+def confirm_claim_return(*, claim: Claim, actor) -> Claim:
+    claim = Claim.objects.select_for_update().select_related(
+        "item",
+        "claimant",
+        "item__reporter",
+    ).get(pk=claim.pk)
+
+    if not (actor.is_staff or claim.item.reporter_id == actor.id):
+        raise ReturnConfirmationError("You do not have permission to confirm this return.")
+
+    if claim.status != Claim.Status.APPROVED:
+        raise ReturnConfirmationError("Only approved claims can be marked as returned.")
+
+    item = claim.item
+    if item.status == Item.Status.RETURNED:
+        raise ReturnConfirmationError("This item has already been marked as returned.")
+
+    if item.status != Item.Status.CLAIMED:
+        raise ReturnConfirmationError("Only claimed items can be marked as returned.")
+
+    if item.claimed_by_id != claim.claimant_id:
+        raise ReturnConfirmationError("This claim is no longer the active claimant for the item.")
+
+    item.status = Item.Status.RETURNED
+    item.save(update_fields=["status", "updated_at"])
+    return claim

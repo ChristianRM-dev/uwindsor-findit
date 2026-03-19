@@ -116,6 +116,7 @@ class Notification(models.Model):
         CLAIM_SUBMITTED = "CLAIM_SUBMITTED", "Claim submitted"
         CLAIM_APPROVED = "CLAIM_APPROVED", "Claim approved"
         CLAIM_REJECTED = "CLAIM_REJECTED", "Claim rejected"
+        ITEM_RETURNED = "ITEM_RETURNED", "Item returned"
 
     recipient = models.ForeignKey(
         "users.User",
