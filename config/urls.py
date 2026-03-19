@@ -16,7 +16,7 @@ urlpatterns = [
     path("auth/", include("apps.users.urls")),
     path("", include("apps.chat.urls")),
     path("", include("apps.core.urls")),
-    path("", include("apps.listings.urls")),
+    path("", include("apps.listings.urls")),  # <- add this
 ]
 
 if settings.DEBUG:
