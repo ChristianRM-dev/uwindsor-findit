@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 from datetime import timedelta
 
+from apps.core.models import UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
 
 
@@ -63,6 +64,39 @@ class DashboardViewTests(TestCase):
         self.assertNotContains(response, "Search lost & found items...")
         self.assertNotContains(response, "Claims Recibidos")
         self.assertContains(response, f'href="{reverse("core:home")}"')
+        self.assertContains(response, "Recent Activity")
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.PAGE_VIEW,
+                page_path=self.url,
+            ).exists()
+        )
+
+    def test_dashboard_renders_recent_activity_entries(self):
+        UserActivity.objects.create(
+            user=self.user,
+            activity_type=UserActivity.ActivityType.SEARCH,
+            page_path=reverse("listings:search_results"),
+            search_query="wallet",
+            metadata={"result_count": 2, "status": "LOST"},
+        )
+        UserActivity.objects.create(
+            user=self.user,
+            activity_type=UserActivity.ActivityType.ITEM_VIEW,
+            page_path=reverse("listings:item_detail_public", kwargs={"pk": self.item.pk}),
+            item=self.item,
+            metadata={},
+        )
+
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Searched for")
+        self.assertContains(response, "wallet")
+        self.assertContains(response, "Lost | 2 result(s)")
+        self.assertContains(response, f"Viewed item: {self.item.title}")
 
 
 class HomePublicNavbarTests(TestCase):
@@ -89,6 +123,13 @@ class HomePublicNavbarTests(TestCase):
         self.assertNotContains(response, "Claims Recibidos")
         self.assertContains(response, f'href="{reverse("users:login")}"')
         self.assertContains(response, f'href="{reverse("users:register")}"')
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.PAGE_VIEW,
+                page_path=self.url,
+            ).exists()
+        )
 
 
 class HomeLandingContentTests(TestCase):

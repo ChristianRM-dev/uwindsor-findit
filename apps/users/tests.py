@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.chat.models import Conversation, Message
+from apps.core.models import UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
 
 
@@ -122,6 +123,16 @@ class AdminPanelTests(TestCase):
         self.assertEqual(self.item.claimed_by, self.claimant_1)
         self.assertEqual(self.secondary_claim.status, Claim.Status.REJECTED)
         self.assertEqual(self.secondary_claim.reviewer, self.admin_user)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.admin_user,
+                activity_type=UserActivity.ActivityType.CLAIM_REVIEW,
+                item=self.item,
+                metadata__claim_id=self.pending_claim.id,
+                metadata__decision="approve",
+                metadata__via="admin",
+            ).exists()
+        )
 
     def test_claim_admin_reject_action_reviews_claim(self):
         response = self.client.post(
@@ -144,3 +155,13 @@ class AdminPanelTests(TestCase):
         self.assertEqual(self.pending_claim.reviewer_notes, "Rejected in Django admin.")
         self.assertEqual(self.item.status, Item.Status.LOST)
         self.assertIsNone(self.item.claimed_by)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.admin_user,
+                activity_type=UserActivity.ActivityType.CLAIM_REVIEW,
+                item=self.item,
+                metadata__claim_id=self.pending_claim.id,
+                metadata__decision="reject",
+                metadata__via="admin",
+            ).exists()
+        )

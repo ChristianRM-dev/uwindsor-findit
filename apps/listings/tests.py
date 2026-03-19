@@ -13,6 +13,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.core.models import UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
 
 
@@ -94,6 +95,14 @@ class ReportLostItemViewTests(TestCase):
         self.assertEqual(created_item.reporter, self.user)
         self.assertEqual(response.url, reverse("listings:item_detail_public", kwargs={"pk": created_item.pk}))
         self.assertEqual(ItemImage.objects.filter(item=created_item).count(), 1)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.ITEM_REPORT,
+                item=created_item,
+                metadata__item_type=Item.ItemType.LOST,
+            ).exists()
+        )
 
     def test_rejects_future_date(self):
         self.client.login(username=self.user.username, password="StrongPass123!")
@@ -255,6 +264,14 @@ class ReportFoundItemViewTests(TestCase):
         self.assertEqual(created_item.status, Item.Status.FOUND)
         self.assertEqual(created_item.reporter, self.user)
         self.assertEqual(ItemImage.objects.filter(item=created_item).count(), 1)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.ITEM_REPORT,
+                item=created_item,
+                metadata__item_type=Item.ItemType.FOUND,
+            ).exists()
+        )
 
     def test_found_form_rejects_future_date(self):
         self.client.login(username=self.user.username, password="StrongPass123!")
@@ -272,6 +289,73 @@ class ReportFoundItemViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Date found cannot be in the future.")
         self.assertEqual(Item.objects.count(), 0)
+
+
+class SearchAndItemActivityTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="activity-viewer@uwindsor.ca",
+            email="activity-viewer@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.owner = User.objects.create_user(
+            username="activity-owner@uwindsor.ca",
+            email="activity-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.category = Category.objects.create(name="Search Docs", slug="search-docs", is_active=True)
+        self.location = CampusLocation.objects.create(name="Search Hall", code="search-hall", is_active=True)
+        self.item = Item.objects.create(
+            reporter=self.owner,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Blue Wallet",
+            description="Wallet near admin building.",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.search_url = reverse("listings:search_results")
+        self.detail_url = reverse("listings:item_detail_public", kwargs={"pk": self.item.pk})
+
+    def test_search_view_logs_search_activity(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            self.search_url,
+            {
+                "q": "wallet",
+                "category": self.category.slug,
+                "status": Item.Status.LOST,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.SEARCH,
+                search_query="wallet",
+                metadata__category=self.category.slug,
+                metadata__status=Item.Status.LOST,
+            ).exists()
+        )
+
+    def test_item_detail_logs_item_view_activity(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(self.detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.ITEM_VIEW,
+                item=self.item,
+            ).exists()
+        )
 
 
 class ClaimCreateViewTests(TestCase):
@@ -381,6 +465,14 @@ class ClaimCreateViewTests(TestCase):
         self.assertIn("Relationship to item: Owner", created_claim.description)
         self.assertIn("Where lost: Library", created_claim.description)
         self.assertEqual(ClaimProof.objects.filter(claim=created_claim).count(), 2)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.CLAIM_SUBMISSION,
+                item=self.item,
+                metadata__claim_id=created_claim.id,
+            ).exists()
+        )
 
     def test_invalid_post_shows_top_alert_and_field_errors(self):
         self.client.login(username=self.user.username, password="StrongPass123!")
@@ -964,6 +1056,15 @@ class ClaimReviewViewTests(TestCase):
         self.assertEqual(self.other_pending_claim.status, Claim.Status.REJECTED)
         self.assertEqual(self.other_pending_claim.reviewer, self.reporter)
         self.assertIn("another claim for this item was approved", self.other_pending_claim.reviewer_notes.lower())
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.reporter,
+                activity_type=UserActivity.ActivityType.CLAIM_REVIEW,
+                item=self.item,
+                metadata__claim_id=self.claim.id,
+                metadata__decision="approve",
+            ).exists()
+        )
 
     def test_reporter_can_reject_claim_with_notes(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")
@@ -984,6 +1085,15 @@ class ClaimReviewViewTests(TestCase):
         self.assertEqual(self.claim.reviewer, self.reporter)
         self.assertEqual(self.item.status, Item.Status.LOST)
         self.assertIsNone(self.item.claimed_by)
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.reporter,
+                activity_type=UserActivity.ActivityType.CLAIM_REVIEW,
+                item=self.item,
+                metadata__claim_id=self.claim.id,
+                metadata__decision="reject",
+            ).exists()
+        )
 
     def test_reject_requires_reviewer_notes(self):
         self.client.login(username=self.reporter.username, password="StrongPass123!")

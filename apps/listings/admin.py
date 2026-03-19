@@ -1,5 +1,7 @@
 from django.contrib import admin, messages
 
+from apps.core.models import UserActivity
+from apps.core.services import track_activity
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
 from apps.listings.services import ClaimReviewError, review_claim
 
@@ -136,6 +138,18 @@ class ClaimAdmin(admin.ModelAdmin):
                     decision="approve",
                     reviewer_notes="Approved in Django admin.",
                 )
+                track_activity(
+                    request,
+                    UserActivity.ActivityType.CLAIM_REVIEW,
+                    user=request.user,
+                    item=claim.item,
+                    metadata={
+                        "claim_id": claim.id,
+                        "decision": "approve",
+                        "via": "admin",
+                    },
+                    page_path=request.path,
+                )
                 approved += 1
             except ClaimReviewError:
                 skipped += 1
@@ -161,6 +175,18 @@ class ClaimAdmin(admin.ModelAdmin):
                     reviewer=request.user,
                     decision="reject",
                     reviewer_notes="Rejected in Django admin.",
+                )
+                track_activity(
+                    request,
+                    UserActivity.ActivityType.CLAIM_REVIEW,
+                    user=request.user,
+                    item=claim.item,
+                    metadata={
+                        "claim_id": claim.id,
+                        "decision": "reject",
+                        "via": "admin",
+                    },
+                    page_path=request.path,
                 )
                 rejected += 1
             except ClaimReviewError:

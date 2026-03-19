@@ -57,6 +57,33 @@
       </div>
     </div>
 
+    <div class="card mb-4">
+      <div class="card-header bg-white">
+        <h2 class="h6 mb-0">Recent Activity</h2>
+      </div>
+      <div class="card-body">
+        {% if recent_activities %}
+          <div class="list-group list-group-flush">
+            {% for activity in recent_activities %}
+              <div class="list-group-item px-0">
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                  <div>
+                    <div class="fw-semibold">{{ activity.display_title }}</div>
+                    {% if activity.display_detail %}
+                      <div class="small text-muted">{{ activity.display_detail }}</div>
+                    {% endif %}
+                  </div>
+                  <div class="small text-muted">{{ activity.created_at|date:"M d, Y g:i A" }}</div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="text-muted mb-0">No activity yet. Your searches, item views, claims, and messages will appear here.</p>
+        {% endif %}
+      </div>
+    </div>
+
     <div class="alert alert-light border mb-0">
       Signed in as <strong>{{ user.email|default:user.get_username }}</strong>.
     </div>

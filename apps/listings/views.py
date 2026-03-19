@@ -7,6 +7,8 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import NoReverseMatch, reverse
 
+from apps.core.models import UserActivity
+from apps.core.services import track_activity
 from apps.listings.forms import (
     ClaimCreateForm,
     ClaimReviewForm,
@@ -204,6 +206,36 @@ def search_results_view(request):
         },
         "result_count": paginator.count,
     }
+
+    has_search_filters = any(
+        [
+            q,
+            category_slug,
+            location_code,
+            status,
+            sort != "newest",
+            request.GET.get("page"),
+        ]
+    )
+    if has_search_filters:
+        track_activity(
+            request,
+            UserActivity.ActivityType.SEARCH,
+            search_query=q,
+            metadata={
+                "category": category_slug,
+                "location": location_code,
+                "status": status,
+                "sort": sort,
+                "result_count": paginator.count,
+            },
+        )
+    else:
+        track_activity(
+            request,
+            UserActivity.ActivityType.PAGE_VIEW,
+            metadata={"page": "search"},
+        )
     return render(request, "listings/search_results.html", context)
 
 
@@ -243,6 +275,16 @@ def item_detail_view(request, pk: int):
         "edit_url": reverse("listings:item_edit", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
         "delete_url": reverse("listings:item_delete", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
     }
+    track_activity(
+        request,
+        UserActivity.ActivityType.ITEM_VIEW,
+        item=item,
+        metadata={
+            "status": item.status,
+            "item_type": item.item_type,
+            "is_owner": request.user.is_authenticated and item.reporter_id == request.user.id,
+        },
+    )
     return render(request, "listings/item_detail.html", context)
 
 
@@ -264,6 +306,17 @@ def report_lost_item_view(request):
                     image=photo,
                     uploaded_by=request.user,
                 )
+
+        track_activity(
+            request,
+            UserActivity.ActivityType.ITEM_REPORT,
+            item=item,
+            metadata={
+                "item_type": item.item_type,
+                "status": item.status,
+                "photo_count": item.images.count(),
+            },
+        )
 
         return redirect(reverse("listings:item_detail_public", kwargs={"pk": item.pk}))
 
@@ -289,6 +342,17 @@ def report_found_item_view(request):
                     image=photo,
                     uploaded_by=request.user,
                 )
+
+        track_activity(
+            request,
+            UserActivity.ActivityType.ITEM_REPORT,
+            item=item,
+            metadata={
+                "item_type": item.item_type,
+                "status": item.status,
+                "photo_count": item.images.count(),
+            },
+        )
 
         return redirect(reverse("listings:item_detail_public", kwargs={"pk": item.pk}))
 
@@ -340,6 +404,17 @@ def claim_create_view(request, item_id: int):
                             claim=claim,
                             file=uploaded_file,
                         )
+
+                track_activity(
+                    request,
+                    UserActivity.ActivityType.CLAIM_SUBMISSION,
+                    item=item,
+                    metadata={
+                        "claim_id": claim.id,
+                        "relationship_to_item": form.cleaned_data["relationship_to_item"],
+                        "proof_count": claim.proofs.count(),
+                    },
+                )
 
                 return redirect("listings:my_claims")
     else:
@@ -669,6 +744,17 @@ def claim_review_view(request, claim_id: int):
     except ClaimReviewError as exc:
         messages.error(request, str(exc))
         return redirect("listings:claim_detail", claim_id=claim.id)
+
+    track_activity(
+        request,
+        UserActivity.ActivityType.CLAIM_REVIEW,
+        item=claim.item,
+        metadata={
+            "claim_id": claim.id,
+            "decision": decision,
+            "via": "claim_detail",
+        },
+    )
 
     if decision == ClaimReviewForm.DECISION_APPROVE:
         messages.success(request, "Claim approved. The item is now marked as claimed.")
