@@ -111,7 +111,8 @@ This repo includes a Blueprint at [render.yaml](../render.yaml) and CI at [.gith
    - `BREVO_API_KEY`
    - `DJANGO_DEFAULT_FROM_EMAIL`
 6. Make sure `DJANGO_DEFAULT_FROM_EMAIL` matches the sender you already verified in Brevo.
-7. After the first deploy, verify:
+7. If this is an existing Blueprint-managed service, add any new `sync: false` secrets manually in the Render dashboard. Render only prompts for those values during the initial Blueprint creation flow.
+8. After the first deploy, verify:
 
 ```text
 https://uwindsor-findit-dev.onrender.com/health/

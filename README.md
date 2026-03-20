@@ -43,6 +43,7 @@ After the first deploy:
 - if you intentionally switch back to Resend later, update `EMAIL_PROVIDER` and the matching provider env vars
 - open `/health/` to verify the service is up
 - optionally create a superuser from the Render Shell
+- if this Blueprint already existed before the Brevo switch, add `BREVO_API_KEY` manually in the Render dashboard because `sync: false` secrets are only prompted during the initial Blueprint creation flow
 
 Demo notes:
 

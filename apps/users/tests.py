@@ -100,6 +100,41 @@ class RegistrationAndLoginViewTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Your account is not active. Please verify your email first.")
+        self.assertContains(response, "Resend verification email")
+        self.assertEqual(
+            self.client.session.get("users_pending_verification_user_id"),
+            get_user_model().objects.get(email="inactive@uwindsor.ca").pk,
+        )
+
+    @override_settings(
+        REQUIRE_EMAIL_VERIFICATION=True,
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    def test_resend_verification_email_sends_new_email_for_pending_inactive_user(self):
+        user = get_user_model().objects.create_user(
+            username="inactive2@uwindsor.ca",
+            email="inactive2@uwindsor.ca",
+            password="StrongPass123!",
+            is_active=False,
+        )
+        session = self.client.session
+        session["users_pending_verification_user_id"] = user.pk
+        session.save()
+
+        response = self.client.post(reverse("users:resend_verification_email"), follow=True)
+
+        self.assertRedirects(response, self.verify_sent_url)
+        self.assertContains(response, "Check your email")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/auth/verify-email/", mail.outbox[0].body)
+        self.assertNotIn("users_pending_verification_user_id", self.client.session)
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
+    def test_resend_verification_email_requires_pending_inactive_user(self):
+        response = self.client.post(reverse("users:resend_verification_email"), follow=True)
+
+        self.assertRedirects(response, self.login_url)
+        self.assertContains(response, "Please log in again to request a new verification email.")
 
     @override_settings(REQUIRE_EMAIL_VERIFICATION=False, LOGIN_FAILURE_LIMIT=3, LOGIN_LOCKOUT_SECONDS=60)
     def test_login_locks_after_repeated_invalid_attempts(self):

@@ -11,13 +11,29 @@ from django.urls import reverse
 
 from .forms import ProfileUpdateForm, RegisterForm
 from .services.registration import create_user_from_register_form, handle_post_registration
-from .services.email_verification import unsign_verification_token
+from .services.email_verification import send_verification_email, unsign_verification_token
 from .services.login_security import (
     clear_failed_login,
     format_lockout_message,
     get_lockout_remaining_seconds,
     record_failed_login,
 )
+
+PENDING_VERIFICATION_SESSION_KEY = "users_pending_verification_user_id"
+
+
+def _get_pending_verification_user(request: HttpRequest):
+    user_id = request.session.get(PENDING_VERIFICATION_SESSION_KEY)
+    if not user_id:
+        return None
+
+    User = get_user_model()
+    user = User.objects.filter(pk=user_id).first()
+    if not user or user.is_active:
+        request.session.pop(PENDING_VERIFICATION_SESSION_KEY, None)
+        return None
+
+    return user
 
 
 @require_http_methods(["GET", "POST"])
@@ -57,6 +73,7 @@ def login_view(request: HttpRequest) -> HttpResponse:
         return redirect("core:dashboard")
 
     form = AuthenticationForm(request, data=request.POST or None)
+    pending_verification_user = _get_pending_verification_user(request)
 
     if request.method == "POST":
         identifier = (request.POST.get("username") or "").strip().lower()
@@ -67,6 +84,7 @@ def login_view(request: HttpRequest) -> HttpResponse:
 
         if form.is_valid():
             user = form.get_user()
+            request.session.pop(PENDING_VERIFICATION_SESSION_KEY, None)
             clear_failed_login(request=request, identifier=identifier)
             login(request, user)
             messages.success(request, "Welcome back!")
@@ -80,16 +98,29 @@ def login_view(request: HttpRequest) -> HttpResponse:
         raw_password = request.POST.get("password") or ""
 
         if inactive_user and not inactive_user.is_active and inactive_user.check_password(raw_password):
+            request.session[PENDING_VERIFICATION_SESSION_KEY] = inactive_user.pk
             messages.error(request, "Your account is not active. Please verify your email first.")
-            return render(request, "users/login.html", {"form": form})
+            return render(
+                request,
+                "users/login.html",
+                {
+                    "form": form,
+                    "pending_verification_email": inactive_user.email,
+                },
+            )
 
+        request.session.pop(PENDING_VERIFICATION_SESSION_KEY, None)
         remaining_after_failure = record_failed_login(request=request, identifier=identifier)
         if remaining_after_failure:
             messages.error(request, format_lockout_message(remaining_after_failure))
         else:
             messages.error(request, "Invalid credentials. Please try again.")
 
-    return render(request, "users/login.html", {"form": form})
+    context = {"form": form}
+    if pending_verification_user:
+        context["pending_verification_email"] = pending_verification_user.email
+
+    return render(request, "users/login.html", context)
 
 
 @require_POST
@@ -138,8 +169,22 @@ def verify_email_view(request: HttpRequest, token: str) -> HttpResponse:
 
     user.is_active = True
     user.save(update_fields=["is_active"])
+    request.session.pop(PENDING_VERIFICATION_SESSION_KEY, None)
     messages.success(request, "Email verified successfully. You can now login.")
     return redirect("users:login")
+
+
+@require_POST
+def resend_verification_email_view(request: HttpRequest) -> HttpResponse:
+    user = _get_pending_verification_user(request)
+    if not user:
+        messages.error(request, "Please log in again to request a new verification email.")
+        return redirect("users:login")
+
+    send_verification_email(request, user)
+    request.session.pop(PENDING_VERIFICATION_SESSION_KEY, None)
+    messages.info(request, "We sent a new verification email. Please check your inbox.")
+    return redirect("users:verify_email_sent")
 
 
 @login_required
