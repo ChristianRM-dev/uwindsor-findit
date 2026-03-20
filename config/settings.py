@@ -71,6 +71,7 @@ CSRF_TRUSTED_ORIGINS = env_list(
     "http://127.0.0.1,http://localhost",
 )
 SERVE_MEDIA_LOCALLY = env_bool("DJANGO_SERVE_MEDIA_LOCALLY", DEBUG)
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "").strip().lower()
 
 # Application definition
 DJANGO_APPS = [
@@ -220,11 +221,17 @@ LOGIN_REDIRECT_URL = "/dashboard/"
 LOGOUT_REDIRECT_URL = "/"
 
 # Email settings
-EMAIL_BACKEND = os.getenv(
-    "DJANGO_EMAIL_BACKEND",
-    "django.core.mail.backends.console.EmailBackend",
-)
+EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "")
+if not EMAIL_BACKEND:
+    if EMAIL_PROVIDER == "resend":
+        EMAIL_BACKEND = "apps.core.email_backends.ApiEmailBackend"
+    else:
+        EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
 DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@findit.local")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_API_URL = os.getenv("RESEND_API_URL", "https://api.resend.com/emails")
+RESEND_REQUEST_TIMEOUT = float(os.getenv("RESEND_REQUEST_TIMEOUT", "10"))
 EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("DJANGO_EMAIL_HOST_USER", "")

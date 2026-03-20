@@ -56,7 +56,7 @@ jobs:
         run: python manage.py check
 
       - name: Run test suite
-        run: python manage.py test apps.core.tests apps.chat.tests apps.listings.tests
+        run: python manage.py test apps.core.tests apps.chat.tests apps.listings.tests apps.users.tests
 
       - name: Collect static files
         run: python manage.py collectstatic --noinput
