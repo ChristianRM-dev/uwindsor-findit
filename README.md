@@ -38,8 +38,9 @@ This repo is prepared for a Render demo deployment from the `dev` branch.
 
 After the first deploy:
 
-- set the Resend values that Render prompts for
-- verify the sending domain in Resend and use that domain in `DJANGO_DEFAULT_FROM_EMAIL`
+- set the Brevo values that Render prompts for
+- set `DJANGO_DEFAULT_FROM_EMAIL` to the sender address you already verified in Brevo
+- if you intentionally switch back to Resend later, update `EMAIL_PROVIDER` and the matching provider env vars
 - open `/health/` to verify the service is up
 - optionally create a superuser from the Render Shell
 
@@ -47,7 +48,8 @@ Demo notes:
 
 - uploads are intentionally ephemeral in this iteration
 - the free Render Postgres plan is suitable for a short-lived demo, not a long-running environment
-- Render Free cannot use SMTP, so this repo is configured to send email through Resend's HTTP API instead
-- Resend requires a verified sender domain for real recipients; without that, you are limited to sandbox-style testing
+- Render Free cannot use SMTP, so this repo is configured to send email through Brevo's HTTP API by default
+- the deploy flow assumes your `DJANGO_DEFAULT_FROM_EMAIL` sender is already verified in Brevo
+- Resend remains supported as a secondary provider through `EMAIL_PROVIDER=resend`
 
 > Keep these docs short, practical, and updated. If a doc changes behavior, update the README and any scripts accordingly.

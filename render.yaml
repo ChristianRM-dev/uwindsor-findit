@@ -21,8 +21,8 @@ services:
       - key: DJANGO_SERVE_MEDIA_LOCALLY
         value: "true"
       - key: EMAIL_PROVIDER
-        value: resend
-      - key: RESEND_API_KEY
+        value: brevo
+      - key: BREVO_API_KEY
         sync: false
       - key: DJANGO_DEFAULT_FROM_EMAIL
         sync: false

@@ -223,12 +223,19 @@ LOGOUT_REDIRECT_URL = "/"
 # Email settings
 EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "")
 if not EMAIL_BACKEND:
-    if EMAIL_PROVIDER == "resend":
+    if EMAIL_PROVIDER in {"brevo", "resend"}:
         EMAIL_BACKEND = "apps.core.email_backends.ApiEmailBackend"
+    elif EMAIL_PROVIDER:
+        raise ImproperlyConfigured(
+            f"Unsupported EMAIL_PROVIDER {EMAIL_PROVIDER!r}. Expected 'brevo' or 'resend'."
+        )
     else:
         EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@findit.local")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+BREVO_API_URL = os.getenv("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
+BREVO_REQUEST_TIMEOUT = float(os.getenv("BREVO_REQUEST_TIMEOUT", "10"))
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 RESEND_API_URL = os.getenv("RESEND_API_URL", "https://api.resend.com/emails")
 RESEND_REQUEST_TIMEOUT = float(os.getenv("RESEND_REQUEST_TIMEOUT", "10"))

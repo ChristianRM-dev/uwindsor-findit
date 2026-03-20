@@ -1,9 +1,11 @@
+import base64
 import json
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.checks import run_checks
 from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import EmailMultiAlternatives
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -16,6 +18,86 @@ from apps.listings.models import CampusLocation, Category, Claim, Item
 
 
 class ApiEmailBackendTests(SimpleTestCase):
+    @override_settings(
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="br_test_key",
+        DEFAULT_FROM_EMAIL="FindIt <sender@example.com>",
+    )
+    def test_brevo_backend_posts_expected_payload(self):
+        backend = ApiEmailBackend()
+        message = EmailMultiAlternatives(
+            subject="Password reset",
+            body="Reset your password",
+            to=['Student Example <student@example.com>'],
+            cc=["advisor@example.com"],
+            bcc=['Audit User <audit@example.com>'],
+            reply_to=['Support Team <support@example.com>'],
+            headers={"X-Entity-Ref-ID": "thread-123"},
+        )
+        message.attach_alternative("<p>Reset your password</p>", "text/html")
+        message.attach("notes.txt", "hello", "text/plain")
+
+        response = MagicMock()
+        response.read.return_value = b'{"messageId":"email_123"}'
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+
+        with patch(
+            "apps.core.email_backends.urlopen",
+            return_value=response,
+        ) as mocked_urlopen:
+            sent_count = backend.send_messages([message])
+
+        self.assertEqual(sent_count, 1)
+        request = mocked_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+        headers = dict(request.header_items())
+
+        self.assertEqual(headers["Api-key"], "br_test_key")
+        self.assertEqual(payload["sender"], {"name": "FindIt", "email": "sender@example.com"})
+        self.assertEqual(
+            payload["to"],
+            [{"name": "Student Example", "email": "student@example.com"}],
+        )
+        self.assertEqual(payload["cc"], [{"email": "advisor@example.com"}])
+        self.assertEqual(
+            payload["bcc"],
+            [{"name": "Audit User", "email": "audit@example.com"}],
+        )
+        self.assertEqual(
+            payload["replyTo"],
+            {"name": "Support Team", "email": "support@example.com"},
+        )
+        self.assertEqual(payload["subject"], "Password reset")
+        self.assertEqual(payload["textContent"], "Reset your password")
+        self.assertEqual(payload["htmlContent"], "<p>Reset your password</p>")
+        self.assertEqual(
+            payload["attachment"],
+            [
+                {
+                    "name": "notes.txt",
+                    "content": base64.b64encode(b"hello").decode("ascii"),
+                }
+            ],
+        )
+        self.assertEqual(payload["headers"]["X-Entity-Ref-ID"], "thread-123")
+
+    @override_settings(
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="",
+        DEFAULT_FROM_EMAIL="FindIt <sender@example.com>",
+    )
+    def test_brevo_backend_requires_api_key(self):
+        backend = ApiEmailBackend()
+        message = EmailMultiAlternatives(
+            subject="Hello",
+            body="World",
+            to=["student@example.com"],
+        )
+
+        with self.assertRaises(ImproperlyConfigured):
+            backend.send_messages([message])
+
     @override_settings(
         EMAIL_PROVIDER="resend",
         RESEND_API_KEY="re_test_key",
@@ -48,7 +130,9 @@ class ApiEmailBackendTests(SimpleTestCase):
         self.assertEqual(sent_count, 1)
         request = mocked_urlopen.call_args.args[0]
         payload = json.loads(request.data.decode("utf-8"))
+        headers = dict(request.header_items())
 
+        self.assertEqual(headers["Authorization"], "Bearer re_test_key")
         self.assertEqual(payload["from"], "FindIt <no-reply@example.com>")
         self.assertEqual(payload["to"], ["student@example.com"])
         self.assertEqual(payload["cc"], ["advisor@example.com"])
@@ -74,6 +158,74 @@ class ApiEmailBackendTests(SimpleTestCase):
 
         with self.assertRaises(ImproperlyConfigured):
             backend.send_messages([message])
+
+
+class EmailProviderConfigurationChecksTests(SimpleTestCase):
+    @override_settings(
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="",
+        DEFAULT_FROM_EMAIL="FindIt <sender@uwindsor.ca>",
+    )
+    def test_checks_error_when_brevo_api_key_missing(self):
+        issues = run_checks()
+
+        self.assertTrue(any(issue.id == "core.E101" for issue in issues))
+
+    @override_settings(
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="br_test_key",
+        DEFAULT_FROM_EMAIL="no-reply@findit.local",
+        REQUIRE_EMAIL_VERIFICATION=True,
+    )
+    def test_checks_error_when_from_email_uses_local_domain_for_brevo(self):
+        issues = run_checks()
+
+        self.assertTrue(any(issue.id == "core.E004" for issue in issues))
+
+    @override_settings(
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="br_test_key",
+        DEFAULT_FROM_EMAIL="FindIt <sender@gmail.com>",
+    )
+    def test_checks_warn_when_brevo_uses_public_mailbox_domain(self):
+        issues = run_checks()
+
+        self.assertTrue(any(issue.id == "core.W101" for issue in issues))
+
+    @override_settings(
+        EMAIL_PROVIDER="resend",
+        RESEND_API_KEY="",
+        DEFAULT_FROM_EMAIL="FindIt <onboarding@resend.dev>",
+        REQUIRE_EMAIL_VERIFICATION=True,
+    )
+    def test_checks_error_when_resend_api_key_missing(self):
+        issues = run_checks()
+
+        self.assertTrue(any(issue.id == "core.E001" for issue in issues))
+
+    @override_settings(
+        EMAIL_PROVIDER="resend",
+        RESEND_API_KEY="re_test_key",
+        DEFAULT_FROM_EMAIL="no-reply@findit.local",
+        REQUIRE_EMAIL_VERIFICATION=True,
+    )
+    def test_checks_error_when_from_email_uses_local_domain(self):
+        issues = run_checks()
+
+        self.assertTrue(any(issue.id == "core.E004" for issue in issues))
+
+    @override_settings(
+        EMAIL_PROVIDER="resend",
+        RESEND_API_KEY="re_test_key",
+        DEFAULT_FROM_EMAIL="FindIt <onboarding@resend.dev>",
+        REQUIRE_EMAIL_VERIFICATION=True,
+    )
+    def test_checks_warn_when_resend_dev_is_used_for_verified_signup_flow(self):
+        issues = run_checks()
+        issue_ids = {issue.id for issue in issues}
+
+        self.assertIn("core.W001", issue_ids)
+        self.assertIn("core.W002", issue_ids)
 
 
 class HealthViewTests(TestCase):
