@@ -107,10 +107,10 @@ This repo includes a Blueprint at [render.yaml](../render.yaml) and CI at [.gith
 2. In Render, choose **New > Blueprint** and select this repository.
 3. Accept the default service and database names unless you also update the host env vars in `render.yaml`.
 4. Choose the free plans for the web service and Postgres.
-5. Provide the Resend values Render prompts for:
-   - `RESEND_API_KEY`
+5. Provide the Brevo values Render prompts for:
+   - `BREVO_API_KEY`
    - `DJANGO_DEFAULT_FROM_EMAIL`
-6. Verify the sender domain in Resend and make sure `DJANGO_DEFAULT_FROM_EMAIL` uses that domain.
+6. Make sure `DJANGO_DEFAULT_FROM_EMAIL` matches the sender you already verified in Brevo.
 7. After the first deploy, verify:
 
 ```text
@@ -135,8 +135,9 @@ pip install -r requirements/prod.txt && python manage.py collectstatic --noinput
 
 The start script runs migrations and demo seeds before starting Gunicorn because Render free tier does not support `preDeployCommand`.
 
-Render Free also blocks SMTP ports, so email is sent through Resend's HTTP API when `EMAIL_PROVIDER=resend`.
-Resend requires a verified sender domain before you can send password reset or verification emails to real users.
+Render Free also blocks SMTP ports, so email is sent through an HTTP API provider instead of SMTP.
+This repo now defaults to Brevo with `EMAIL_PROVIDER=brevo`, `BREVO_API_KEY`, and a verified `DJANGO_DEFAULT_FROM_EMAIL` sender.
+Resend is still supported as an optional fallback by switching `EMAIL_PROVIDER=resend` and providing the `RESEND_*` variables.
 
 ### Demo limitations
 
