@@ -20,18 +20,10 @@ services:
         value: https://uwindsor-findit-dev.onrender.com
       - key: DJANGO_SERVE_MEDIA_LOCALLY
         value: "true"
-      - key: DJANGO_EMAIL_BACKEND
-        value: django.core.mail.backends.smtp.EmailBackend
-      - key: DJANGO_EMAIL_HOST
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
         sync: false
-      - key: DJANGO_EMAIL_PORT
-        sync: false
-      - key: DJANGO_EMAIL_HOST_USER
-        sync: false
-      - key: DJANGO_EMAIL_HOST_PASSWORD
-        sync: false
-      - key: DJANGO_EMAIL_USE_TLS
-        value: "true"
       - key: DJANGO_DEFAULT_FROM_EMAIL
         sync: false
       - key: REQUIRE_EMAIL_VERIFICATION
