@@ -519,9 +519,9 @@ def item_detail_view(request, pk: int):
     is_guest = not request.user.is_authenticated
     claim_url = None
     if request.user.is_authenticated:
-        # Modificación: solo generar claim_url si el item NO está en estado LOST
         can_claim_item = (
             item.status == Item.Status.FOUND
+            and item.status != Item.Status.LOST
             and item.reporter_id != request.user.id
         )
         if can_claim_item:
@@ -529,6 +529,7 @@ def item_detail_view(request, pk: int):
                 claim_url = reverse("listings:claim_create", kwargs={"item_id": item.id})
             except NoReverseMatch:
                 claim_url = None
+
     login_url = reverse("users:login")
     register_url = reverse("users:register")
     approved_claim = None
@@ -577,6 +578,7 @@ def item_detail_view(request, pk: int):
         },
     )
     return render(request, "listings/item_detail.html", context)
+
 @login_required
 def report_lost_item_view(request):
     form = ReportLostItemForm(request.POST or None, request.FILES or None)
