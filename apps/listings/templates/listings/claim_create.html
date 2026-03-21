@@ -10,7 +10,7 @@
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
       <div>
         <h1 class="h3 mb-1">Claim Item</h1>
-        <p class="text-muted mb-0">Provide details and proof so the owner/admin can verify your claim.</p>
+        <p class="text-muted mb-0">Provide enough detail and proof so the finder can verify that the item really belongs to you.</p>
       </div>
       <a class="small link-secondary" href="{{ item_details_url }}">&larr; Back to item</a>
     </div>
@@ -73,7 +73,7 @@
 
               <hr class="my-3">
 
-              <p class="small text-muted mb-3">Make sure your claim details match the item description.</p>
+              <p class="small text-muted mb-3">Do not rely on generic details only. Include specific identifiers that a false claimant would not know.</p>
 
               <a class="btn btn-outline-secondary btn-sm" href="{{ item_details_url }}">View item details</a>
             {% endif %}
@@ -98,7 +98,7 @@
             {% endif %}
 
             <div class="alert alert-light border" role="alert">
-              To verify ownership, include a clear description and upload at least one proof document or photo.
+              To reduce fraudulent claims, this form asks for identity details, when and where you lost the item, your student card image, and proof that the item belongs to you.
             </div>
 
             <form method="post" enctype="multipart/form-data" novalidate>
@@ -122,7 +122,7 @@
               <div class="mb-3">
                 <label for="id_email" class="form-label">Email</label>
                 <input
-                  type="text"
+                  type="email"
                   id="id_email"
                   name="email"
                   class="form-control{% if form.email.errors %} is-invalid{% endif %}"
@@ -131,6 +131,21 @@
                 >
                 {% if form.email.errors %}
                   <div class="invalid-feedback d-block">{{ form.email.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_student_id" class="form-label">Student ID</label>
+                <input
+                  type="text"
+                  id="id_student_id"
+                  name="student_id"
+                  class="form-control{% if form.student_id.errors %} is-invalid{% endif %}"
+                  value="{{ form.student_id.value|default_if_none:'' }}"
+                  required
+                >
+                {% if form.student_id.errors %}
+                  <div class="invalid-feedback d-block">{{ form.student_id.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
@@ -148,6 +163,23 @@
                 </select>
                 {% if form.relationship_to_item.errors %}
                   <div class="invalid-feedback d-block">{{ form.relationship_to_item.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_lost_date" class="form-label">When did you lose it?</label>
+                <input
+                  type="datetime-local"
+                  id="id_lost_date"
+                  name="lost_date"
+                  class="form-control{% if form.lost_date.errors %} is-invalid{% endif %}"
+                  value="{{ form.lost_date.value|default_if_none:'' }}"
+                  max="{{ form.fields.lost_date.widget.attrs.max }}"
+                  required
+                >
+                <div class="form-text">{{ form.fields.lost_date.help_text }}</div>
+                {% if form.lost_date.errors %}
+                  <div class="invalid-feedback d-block">{{ form.lost_date.errors|join:", " }}</div>
                 {% endif %}
               </div>
 
@@ -190,7 +222,38 @@
               </div>
 
               <div class="mb-3">
-                <label for="id_proof_files" class="form-label">Proof upload</label>
+                <label for="id_lost_location_details" class="form-label">Exact place where you lost it</label>
+                <input
+                  type="text"
+                  id="id_lost_location_details"
+                  name="lost_location_details"
+                  class="form-control{% if form.lost_location_details.errors %} is-invalid{% endif %}"
+                  value="{{ form.lost_location_details.value|default_if_none:'' }}"
+                  required
+                >
+                {% if form.lost_location_details.errors %}
+                  <div class="invalid-feedback d-block">{{ form.lost_location_details.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_student_card_image" class="form-label">Student card image</label>
+                <input
+                  type="file"
+                  id="id_student_card_image"
+                  name="student_card_image"
+                  class="form-control{% if form.student_card_image.errors %} is-invalid{% endif %}"
+                  accept=".jpg,.jpeg,.png,image/jpeg,image/png"
+                  required
+                >
+                <div class="form-text">Accepted: JPG/PNG. Max 10MB.</div>
+                {% if form.student_card_image.errors %}
+                  <div class="invalid-feedback d-block">{{ form.student_card_image.errors|join:", " }}</div>
+                {% endif %}
+              </div>
+
+              <div class="mb-3">
+                <label for="id_proof_files" class="form-label">Ownership proof upload</label>
                 <input
                   type="file"
                   id="id_proof_files"
@@ -200,7 +263,7 @@
                   multiple
                   required
                 >
-                <div class="form-text">Accepted: JPG/PNG/PDF. Max 10MB each. Upload 1-3 files.</div>
+                <div class="form-text">Accepted: JPG/PNG/PDF. Max 10MB each. Upload 1-3 files that help prove the item is yours.</div>
                 <ul id="uploaded-files-list" class="small list-unstyled mt-2 mb-0"></ul>
                 <div
                   id="proof-upload-warning"

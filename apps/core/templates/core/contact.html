@@ -7,28 +7,54 @@
   {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
 
   <div class="row justify-content-center">
-    <div class="col-12 col-lg-8">
+    <div class="col-12 col-xl-9">
       <div class="card shadow-sm border-0">
         <div class="card-body p-4 p-lg-5">
           <h1 class="h2 mb-3">Contact</h1>
           <p class="text-muted mb-4">
-            Need help with a lost-and-found report or account access? Use the details below to reach the project team.
+            Need help with a lost-and-found report, account access, or a general project question?
+            Use the options below to reach the FindIt project team.
           </p>
 
           <div class="row g-4">
             <div class="col-md-6">
-              <h2 class="h5">Support Email</h2>
-              <p class="mb-0">
-                <a href="mailto:support@findit.local">support@findit.local</a>
+              <div class="border rounded-3 h-100 p-4 bg-light-subtle">
+                <h2 class="h5">Project Team</h2>
+                <p class="text-muted mb-3">
+                  Reach the team members directly using the contact details listed on the team page.
+                </p>
+                <a class="btn btn-outline-primary btn-sm" href="{% url 'core:team' %}">
+                  View Team Details
+                </a>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="border rounded-3 h-100 p-4 bg-light-subtle">
+                <h2 class="h5">Best for</h2>
+                <ul class="mb-0 text-muted">
+                  <li>Login or account-access issues</li>
+                  <li>Questions about lost or found item reports</li>
+                  <li>Feedback, bugs, or project-related inquiries</li>
+                </ul>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <h2 class="h5">Response expectation</h2>
+              <p class="mb-0 text-muted">
+                As a student project, responses may not be immediate, but the team page provides the right contact
+                points for follow-up.
               </p>
             </div>
             <div class="col-md-6">
-              <h2 class="h5">Support Hours</h2>
-              <p class="mb-0">Monday to Friday, 9:00 AM to 5:00 PM</p>
+              <h2 class="h5">Item-specific questions</h2>
+              <p class="mb-0 text-muted">
+                For questions about a specific listing, sign in and use the built-in messaging feature from the
+                item details page so the conversation stays connected to that report.
+              </p>
             </div>
             <div class="col-12">
               <div class="alert alert-light border mb-0">
-                For item-specific questions, sign in and use the built-in messaging feature from the item details page.
+                If you are trying to recover a specific item, include enough detail to help verify ownership when you contact the reporter.
               </div>
             </div>
           </div>

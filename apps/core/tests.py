@@ -1,12 +1,87 @@
+import json
+from datetime import timedelta
+from unittest.mock import MagicMock, patch
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.exceptions import ImproperlyConfigured
+from django.core.mail import EmailMultiAlternatives
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
-from datetime import timedelta
 
+from apps.core.email_backends import ApiEmailBackend
 from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
+
+
+class ApiEmailBackendTests(SimpleTestCase):
+    @override_settings(
+        EMAIL_PROVIDER="resend",
+        RESEND_API_KEY="re_test_key",
+        DEFAULT_FROM_EMAIL="FindIt <no-reply@example.com>",
+    )
+    def test_resend_backend_posts_expected_payload(self):
+        backend = ApiEmailBackend()
+        message = EmailMultiAlternatives(
+            subject="Password reset",
+            body="Reset your password",
+            to=["student@example.com"],
+            cc=["advisor@example.com"],
+            bcc=["audit@example.com"],
+            reply_to=["support@example.com"],
+            headers={"X-Entity-Ref-ID": "thread-123"},
+        )
+        message.attach_alternative("<p>Reset your password</p>", "text/html")
+
+        response = MagicMock()
+        response.read.return_value = b'{"id":"email_123"}'
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+
+        with patch(
+            "apps.core.email_backends.urlopen",
+            return_value=response,
+        ) as mocked_urlopen:
+            sent_count = backend.send_messages([message])
+
+        self.assertEqual(sent_count, 1)
+        request = mocked_urlopen.call_args.args[0]
+        payload = json.loads(request.data.decode("utf-8"))
+
+        self.assertEqual(payload["from"], "FindIt <no-reply@example.com>")
+        self.assertEqual(payload["to"], ["student@example.com"])
+        self.assertEqual(payload["cc"], ["advisor@example.com"])
+        self.assertEqual(payload["bcc"], ["audit@example.com"])
+        self.assertEqual(payload["reply_to"], ["support@example.com"])
+        self.assertEqual(payload["subject"], "Password reset")
+        self.assertEqual(payload["text"], "Reset your password")
+        self.assertEqual(payload["html"], "<p>Reset your password</p>")
+        self.assertEqual(payload["headers"]["X-Entity-Ref-ID"], "thread-123")
+
+    @override_settings(
+        EMAIL_PROVIDER="resend",
+        RESEND_API_KEY="",
+        DEFAULT_FROM_EMAIL="FindIt <no-reply@example.com>",
+    )
+    def test_resend_backend_requires_api_key(self):
+        backend = ApiEmailBackend()
+        message = EmailMultiAlternatives(
+            subject="Hello",
+            body="World",
+            to=["student@example.com"],
+        )
+
+        with self.assertRaises(ImproperlyConfigured):
+            backend.send_messages([message])
+
+
+class HealthViewTests(TestCase):
+    def test_health_endpoint_returns_ok(self):
+        response = self.client.get(reverse("core:health"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
 
 
 class DashboardViewTests(TestCase):
@@ -23,8 +98,12 @@ class DashboardViewTests(TestCase):
             password="StrongPass123!",
         )
 
-        self.category = Category.objects.create(name="Misc", slug="misc", is_active=True)
-        self.location = CampusLocation.objects.create(name="Library Main", code="library-main", is_active=True)
+        self.category = Category.objects.create(
+            name="Misc", slug="misc", is_active=True
+        )
+        self.location = CampusLocation.objects.create(
+            name="Library Main", code="library-main", is_active=True
+        )
         self.item = Item.objects.create(
             reporter=self.user,
             item_type=Item.ItemType.LOST,
@@ -85,7 +164,9 @@ class DashboardViewTests(TestCase):
         UserActivity.objects.create(
             user=self.user,
             activity_type=UserActivity.ActivityType.ITEM_VIEW,
-            page_path=reverse("listings:item_detail_public", kwargs={"pk": self.item.pk}),
+            page_path=reverse(
+                "listings:item_detail_public", kwargs={"pk": self.item.pk}
+            ),
             item=self.item,
             metadata={},
         )
@@ -120,7 +201,9 @@ class HomePublicNavbarTests(TestCase):
         self.assertContains(response, "Logout")
         self.assertNotContains(response, f'href="{reverse("listings:my_items")}"')
         self.assertNotContains(response, f'href="{reverse("listings:my_claims")}"')
-        self.assertNotContains(response, f'href="{reverse("listings:my_received_claims")}"')
+        self.assertNotContains(
+            response, f'href="{reverse("listings:my_received_claims")}"'
+        )
         self.assertNotContains(response, "Claims Recibidos")
         self.assertContains(response, f'href="{reverse("users:login")}"')
         self.assertContains(response, f'href="{reverse("users:register")}"')
@@ -146,8 +229,12 @@ class NotificationViewTests(TestCase):
             email="notifications-other@uwindsor.ca",
             password="StrongPass123!",
         )
-        self.category = Category.objects.create(name="Notifications", slug="notifications", is_active=True)
-        self.location = CampusLocation.objects.create(name="Chrysler", code="chrysler", is_active=True)
+        self.category = Category.objects.create(
+            name="Notifications", slug="notifications", is_active=True
+        )
+        self.location = CampusLocation.objects.create(
+            name="Chrysler", code="chrysler", is_active=True
+        )
         self.item = Item.objects.create(
             reporter=self.other_user,
             item_type=Item.ItemType.LOST,
@@ -170,7 +257,9 @@ class NotificationViewTests(TestCase):
             notification_type=Notification.NotificationType.CLAIM_APPROVED,
             title="Claim approved for Orange USB Drive",
             body="Your claim was approved.",
-            link_path=reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}),
+            link_path=reverse(
+                "listings:claim_detail", kwargs={"claim_id": self.claim.pk}
+            ),
             item=self.item,
             claim=self.claim,
         )
@@ -204,7 +293,10 @@ class NotificationViewTests(TestCase):
         self.assertContains(response, self.read_notification.title)
         self.assertContains(response, 'aria-label="Notifications"')
         self.assertContains(response, reverse("core:notifications_mark_all_read"))
-        self.assertContains(response, reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}))
+        self.assertContains(
+            response,
+            reverse("listings:claim_detail", kwargs={"claim_id": self.claim.pk}),
+        )
         self.assertContains(response, "Unread")
         self.assertTrue(
             UserActivity.objects.filter(
@@ -242,13 +334,19 @@ class HomeLandingContentTests(TestCase):
             email="home-content@uwindsor.ca",
             password="StrongPass123!",
         )
-        self.category = Category.objects.create(name="Electronics", slug="electronics", is_active=True)
-        self.location = CampusLocation.objects.create(name="Leddy Library", code="leddy-library", is_active=True)
+        self.category = Category.objects.create(
+            name="Electronics", slug="electronics", is_active=True
+        )
+        self.location = CampusLocation.objects.create(
+            name="Leddy Library", code="leddy-library", is_active=True
+        )
         self.url = reverse("core:home")
 
         self._create_items(status=Item.Status.LOST, count=5, prefix="Lost")
         self._create_items(status=Item.Status.FOUND, count=3, prefix="Found")
-        self._create_items(status=Item.Status.LOST, count=1, prefix="Hidden", is_visible=False)
+        self._create_items(
+            status=Item.Status.LOST, count=1, prefix="Hidden", is_visible=False
+        )
 
     def _create_items(self, *, status, count, prefix, is_visible=True):
         now = timezone.now()
@@ -257,7 +355,11 @@ class HomeLandingContentTests(TestCase):
         for index in range(count):
             item = Item.objects.create(
                 reporter=self.reporter,
-                item_type=Item.ItemType.LOST if status == Item.Status.LOST else Item.ItemType.FOUND,
+                item_type=(
+                    Item.ItemType.LOST
+                    if status == Item.Status.LOST
+                    else Item.ItemType.FOUND
+                ),
                 status=status,
                 title=f"{prefix} Item {index}",
                 description=f"{prefix} description {index}",
@@ -281,9 +383,15 @@ class HomeLandingContentTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Lost something on campus?")
         self.assertContains(response, 'method="get"', count=2)
-        self.assertContains(response, f'action="{reverse("listings:search_results")}"', count=2)
-        self.assertContains(response, f'href="{reverse("listings:search_results")}?status=LOST"')
-        self.assertContains(response, f'href="{reverse("listings:search_results")}?status=FOUND"')
+        self.assertContains(
+            response, f'action="{reverse("listings:search_results")}"', count=2
+        )
+        self.assertContains(
+            response, f'href="{reverse("listings:search_results")}?status=LOST"'
+        )
+        self.assertContains(
+            response, f'href="{reverse("listings:search_results")}?status=FOUND"'
+        )
         self.assertContains(response, f'href="{reverse("listings:faq")}"')
         self.assertContains(response, 'id="recent-lost-tab"')
         self.assertContains(response, 'id="recent-found-tab"')
@@ -316,14 +424,32 @@ class StaticPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "About FindIt")
-        self.assertContains(response, "Report lost and found items")
+        self.assertContains(response, "1. Report")
+        self.assertContains(response, "Trust and safety")
 
     def test_contact_page_renders(self):
         response = self.client.get(reverse("core:contact"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Contact")
-        self.assertContains(response, "support@findit.local")
+        self.assertContains(response, "View Team Details")
+        self.assertContains(response, "Login or account-access issues")
+
+    def test_team_page_renders_all_members(self):
+        response = self.client.get(reverse("core:team"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Team Details")
+        self.assertContains(response, "Christian Rios Mancilla")
+        self.assertContains(response, "riosman@uwindsor.ca")
+        self.assertContains(response, "Sweatha Panneer Selvam")
+        self.assertContains(response, "panneers@uwindsor.ca")
+        self.assertContains(response, "Hong An Do")
+        self.assertContains(response, "doan31@uwindsor.ca")
+        self.assertContains(response, "Zhaojun Zhang")
+        self.assertContains(response, "zhang6o3@uwindsor.ca")
+        self.assertContains(response, "Tingwan Zhou")
+        self.assertContains(response, "zhou9x@uwindsor.ca")
 
 
 class SecuritySettingsTests(TestCase):

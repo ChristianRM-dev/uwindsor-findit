@@ -75,8 +75,11 @@
                       <div class="small text-muted">#ITEM-{{ claim.item.id|stringformat:"04d" }}</div>
                     </td>
                     <td>
-                      <div>{{ claim.claimant.get_username }}</div>
-                      <div class="small text-muted">{{ claim.claimant.email }}</div>
+                      <div>{{ claim.full_name|default:claim.claimant.get_username }}</div>
+                      <div class="small text-muted">{{ claim.email|default:claim.claimant.email }}</div>
+                      {% if claim.student_id %}
+                        <div class="small text-muted">Student ID: {{ claim.student_id }}</div>
+                      {% endif %}
                     </td>
                     <td>
                       {% if claim.status == "PENDING" %}

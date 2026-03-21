@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -12,6 +12,11 @@ from apps.core.models import Notification, UserActivity
 from apps.core.services import mark_all_notifications_as_read, track_activity
 from apps.listings.models import Claim, Item
 
+
+def health_view(request: HttpRequest) -> HttpResponse:
+    return JsonResponse({"status": "ok"})
+
+
 def home_view(request: HttpRequest) -> HttpResponse:
     base_items_qs = (
         Item.objects.filter(is_visible=True)
@@ -19,8 +24,12 @@ def home_view(request: HttpRequest) -> HttpResponse:
         .prefetch_related("images")
     )
     context = {
-        "recent_lost_items": base_items_qs.filter(status=Item.Status.LOST).order_by("-created_at")[:4],
-        "recent_found_items": base_items_qs.filter(status=Item.Status.FOUND).order_by("-created_at")[:4],
+        "recent_lost_items": base_items_qs.filter(status=Item.Status.LOST).order_by(
+            "-created_at"
+        )[:4],
+        "recent_found_items": base_items_qs.filter(status=Item.Status.FOUND).order_by(
+            "-created_at"
+        )[:4],
     }
     track_activity(
         request,
@@ -28,6 +37,7 @@ def home_view(request: HttpRequest) -> HttpResponse:
         metadata={"page": "home"},
     )
     return render(request, "core/home.html", context)
+
 
 def components_demo_view(request: HttpRequest) -> HttpResponse:
     # Simple demo objects to feed into item_card.html
@@ -67,6 +77,7 @@ def components_demo_view(request: HttpRequest) -> HttpResponse:
             "demo_item_3": demo_item_3,
         },
     )
+
 
 @login_required
 def dashboard_view(request: HttpRequest) -> HttpResponse:
@@ -121,6 +132,38 @@ def contact_view(request: HttpRequest) -> HttpResponse:
         ],
     }
     return render(request, "core/contact.html", context)
+
+
+def team_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "team_members": [
+            {
+                "name": "Christian Rios Mancilla",
+                "email": "riosman@uwindsor.ca",
+            },
+            {
+                "name": "Sweatha Panneer Selvam",
+                "email": "panneers@uwindsor.ca",
+            },
+            {
+                "name": "Hong An Do",
+                "email": "doan31@uwindsor.ca",
+            },
+            {
+                "name": "Zhaojun Zhang",
+                "email": "zhang6o3@uwindsor.ca",
+            },
+            {
+                "name": "Tingwan Zhou",
+                "email": "zhou9x@uwindsor.ca",
+            },
+        ],
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Team", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/team.html", context)
 
 
 @login_required

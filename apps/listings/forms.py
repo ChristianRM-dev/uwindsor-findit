@@ -180,7 +180,17 @@ class ClaimCreateForm(forms.Form):
         widget=forms.EmailInput(
             attrs={
                 "class": "form-control",
-                "placeholder": "Enter your email",
+                "placeholder": "Enter your UWindsor email",
+            }
+        ),
+    )
+    student_id = forms.CharField(
+        required=True,
+        max_length=50,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "Enter your student ID",
             }
         ),
     )
@@ -189,13 +199,23 @@ class ClaimCreateForm(forms.Form):
         choices=RELATIONSHIP_CHOICES,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
+    lost_date = forms.DateTimeField(
+        required=True,
+        input_formats=["%Y-%m-%dT%H:%M"],
+        widget=forms.DateTimeInput(
+            attrs={
+                "class": "form-control",
+                "type": "datetime-local",
+            }
+        ),
+    )
     detailed_description = forms.CharField(
         required=True,
         widget=forms.Textarea(
             attrs={
                 "class": "form-control",
                 "rows": 5,
-                "placeholder": "Describe unique identifiers (marks, contents, serial number, case color, etc.).",
+                "placeholder": "Describe the item's unique identifiers, contents, stickers, marks, or anything only the real owner would know.",
             }
         ),
     )
@@ -204,6 +224,25 @@ class ClaimCreateForm(forms.Form):
         queryset=CampusLocation.objects.none(),
         empty_label="Select location",
         widget=forms.Select(attrs={"class": "form-select"}),
+    )
+    lost_location_details = forms.CharField(
+        required=True,
+        max_length=255,
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "placeholder": "e.g. Second-floor study lounge beside the printers",
+            }
+        ),
+    )
+    student_card_image = forms.ImageField(
+        required=True,
+        widget=forms.ClearableFileInput(
+            attrs={
+                "class": "form-control",
+                "accept": ".jpg,.jpeg,.png,image/jpeg,image/png",
+            }
+        ),
     )
     proof_files = MultiFileField(
         required=False,
@@ -223,11 +262,62 @@ class ClaimCreateForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields["where_lost_location"].queryset = CampusLocation.objects.filter(is_active=True)
         self.fields["where_lost_location"].label = "Where did you lose it?"
+        self.fields["lost_date"].label = "When did you lose it?"
+        self.fields["lost_date"].help_text = "Approximate date and time is okay."
+        self.fields["lost_date"].widget.attrs["max"] = timezone.localtime().strftime("%Y-%m-%dT%H:%M")
+        self.fields["lost_location_details"].label = "Exact place where you lost it"
+        self.fields["student_card_image"].label = "Student card image"
+        self.fields["proof_files"].label = "Ownership proof files"
         if user and getattr(user, "is_authenticated", False):
             self.fields["full_name"].initial = (
                 f"{user.first_name} {user.last_name}".strip() or user.get_username()
             )
             self.fields["email"].initial = user.email
+
+    def clean_email(self):
+        email = (self.cleaned_data.get("email") or "").strip().lower()
+        if not email.endswith("@uwindsor.ca"):
+            raise forms.ValidationError("Please use a valid UWindsor email address.")
+        return email
+
+    def clean_student_id(self):
+        student_id = (self.cleaned_data.get("student_id") or "").strip()
+        if not student_id.isdigit() or len(student_id) != 9:
+            raise forms.ValidationError("Student ID must be a 9-digit number.")
+        return student_id
+
+    def clean_detailed_description(self):
+        description = (self.cleaned_data.get("detailed_description") or "").strip()
+        if len(description) < 20:
+            raise forms.ValidationError("Please provide more detail so the finder can verify ownership.")
+        return description
+
+    def clean_lost_location_details(self):
+        return (self.cleaned_data.get("lost_location_details") or "").strip()
+
+    def clean_lost_date(self):
+        lost_date = self.cleaned_data.get("lost_date")
+        if lost_date and lost_date > timezone.now():
+            raise forms.ValidationError("Lost date cannot be in the future.")
+        return lost_date
+
+    def clean_student_card_image(self):
+        file_obj = self.cleaned_data.get("student_card_image")
+        if not file_obj:
+            raise forms.ValidationError("Please upload your student card image.")
+
+        file_ext = ""
+        if file_obj.name and "." in file_obj.name:
+            file_ext = f".{file_obj.name.rsplit('.', 1)[-1].lower()}"
+
+        if file_ext not in {".jpg", ".jpeg", ".png"}:
+            raise forms.ValidationError("Student card image must be a JPG or PNG file.")
+        if file_obj.content_type not in {"image/jpeg", "image/png"}:
+            raise forms.ValidationError("Student card image must be a JPG or PNG file.")
+        if file_obj.size > self.max_file_size:
+            raise forms.ValidationError("Student card image must be 10MB or smaller.")
+
+        return file_obj
 
     def clean_proof_files(self):
         files = self.cleaned_data.get("proof_files") or []

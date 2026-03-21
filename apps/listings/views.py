@@ -99,6 +99,70 @@ def _parse_claim_description(description: str):
     return parsed
 
 
+def _serialize_claim_form_data(form, *, lost_location_name: str) -> str:
+    return (
+        f"Full name: {form.cleaned_data['full_name']}\n"
+        f"Email: {form.cleaned_data['email']}\n"
+        f"Student ID: {form.cleaned_data['student_id']}\n"
+        f"Relationship to item: {form.cleaned_data['relationship_to_item']}\n"
+        f"Lost date: {form.cleaned_data['lost_date'].strftime('%Y-%m-%d %H:%M')}\n"
+        f"Where lost: {lost_location_name}\n"
+        f"Exact lost location: {form.cleaned_data['lost_location_details']}\n\n"
+        f"Claim details:\n{form.cleaned_data['detailed_description']}"
+    )
+
+
+def _build_claim_profile(claim: Claim):
+    parsed = _parse_claim_description(claim.description)
+    return {
+        "full_name": claim.full_name or parsed.get("full_name") or "Not provided",
+        "email": claim.email or parsed.get("email") or claim.claimant.email or "Not provided",
+        "student_id": claim.student_id or "Not provided",
+        "relationship_to_item": claim.relationship_to_item or parsed.get("relationship_to_item") or "Not provided",
+        "lost_date": claim.lost_date,
+        "lost_location": claim.lost_location.name if claim.lost_location_id else parsed.get("where_lost") or "Not provided",
+        "lost_location_details": claim.lost_location_details or "Not provided",
+        "claim_details": claim.description.strip() if not (
+            claim.full_name
+            or claim.email
+            or claim.student_id
+            or claim.relationship_to_item
+            or claim.lost_date
+            or claim.lost_location_id
+            or claim.lost_location_details
+        ) else claim.description.strip(),
+        "parsed_claim_details": parsed.get("claim_details") or claim.description.strip() or "No detailed description provided.",
+        "student_card_image": claim.student_card_image if claim.student_card_image else None,
+    }
+
+
+def _build_claim_review_signals(claim: Claim):
+    location_matches = bool(claim.lost_location_id and claim.lost_location_id == claim.item.location_id)
+    signal_items = [
+        {
+            "label": "Student card uploaded",
+            "state": "good" if bool(claim.student_card_image) else "neutral",
+            "help_text": "Confirms the claimant's identity.",
+        },
+        {
+            "label": "Ownership proof uploaded",
+            "state": "good" if claim.proofs.exists() else "neutral",
+            "help_text": "Receipt, prior photo, or other proof of ownership.",
+        },
+        {
+            "label": "Lost date provided",
+            "state": "good" if bool(claim.lost_date) else "neutral",
+            "help_text": "Helps compare the report against when the item was found.",
+        },
+        {
+            "label": "Location alignment",
+            "state": "good" if location_matches else "neutral",
+            "help_text": "Compare the claimed lost location with the found location on the post.",
+        },
+    ]
+    return signal_items
+
+
 def _build_report_page_context(*, form, item_type: str):
     item_label = "Found" if item_type == Item.ItemType.FOUND else "Lost"
     action_label = "found" if item_type == Item.ItemType.FOUND else "lost"
@@ -148,12 +212,15 @@ def _build_claim_detail_context(request, claim: Claim, *, review_form=None):
     can_review_claim = _user_can_review_claim(request.user, claim)
     can_confirm_return = _user_can_confirm_return(request.user, claim)
 
+    claim_profile = _build_claim_profile(claim)
+
     return {
         "claim": claim,
         "proofs": proof_entries,
         "image_proofs": image_proofs,
         "non_image_proofs": non_image_proofs,
-        "parsed_claim": _parse_claim_description(claim.description),
+        "claim_profile": claim_profile,
+        "review_signals": _build_claim_review_signals(claim),
         "can_review_claim": can_review_claim,
         "can_confirm_return": can_confirm_return,
         "show_review_form": can_review_claim and claim.status == Claim.Status.PENDING,
@@ -452,9 +519,9 @@ def item_detail_view(request, pk: int):
     is_guest = not request.user.is_authenticated
     claim_url = None
     if request.user.is_authenticated:
-        # Modificación: solo generar claim_url si el item NO está en estado LOST
         can_claim_item = (
-            item.status != Item.Status.LOST  # Cambiado de item.status == Item.Status.LOST
+            item.status == Item.Status.FOUND
+            and item.status != Item.Status.LOST
             and item.reporter_id != request.user.id
         )
         if can_claim_item:
@@ -462,6 +529,7 @@ def item_detail_view(request, pk: int):
                 claim_url = reverse("listings:claim_create", kwargs={"item_id": item.id})
             except NoReverseMatch:
                 claim_url = None
+
     login_url = reverse("users:login")
     register_url = reverse("users:register")
     approved_claim = None
@@ -482,8 +550,8 @@ def item_detail_view(request, pk: int):
         "images": item.images.all(),
         "is_guest": is_guest,
         "claim_url": claim_url,
-        "contact_url": reverse("chat:contact_owner", kwargs={
-            "item_id": item.pk}) if request.user.is_authenticated and item.reporter_id != request.user.id else None,
+        "contact_url": reverse("chat:contact_owner", kwargs={"item_id": item.pk}) if request.user.is_authenticated and item.reporter_id != request.user.id else None,
+        "contact_label": "Contact Finder" if item.item_type == Item.ItemType.FOUND else "Contact Owner",
         "login_url": login_url,
         "register_url": register_url,
         "search_url": reverse("listings:search_results"),
@@ -510,6 +578,7 @@ def item_detail_view(request, pk: int):
         },
     )
     return render(request, "listings/item_detail.html", context)
+
 @login_required
 def report_lost_item_view(request):
     form = ReportLostItemForm(request.POST or None, request.FILES or None)
@@ -593,8 +662,8 @@ def claim_create_view(request, item_id: int):
 
     existing_claim = Claim.objects.filter(item=item, claimant=request.user).first()
     claim_restriction_message = None
-    if item.status != Item.Status.LOST:
-        claim_restriction_message = "Only items with Lost status can be claimed."
+    if item.status != Item.Status.FOUND:
+        claim_restriction_message = "Only items with Found status can be claimed."
     elif item.reporter_id == request.user.id:
         claim_restriction_message = "You cannot claim your own reported item."
     elif existing_claim:
@@ -608,17 +677,21 @@ def claim_create_view(request, item_id: int):
             else:
                 with transaction.atomic():
                     where_lost_location = form.cleaned_data["where_lost_location"]
-                    description = (
-                        f"Full name: {form.cleaned_data['full_name']}\n"
-                        f"Email: {form.cleaned_data['email']}\n"
-                        f"Relationship to item: {form.cleaned_data['relationship_to_item']}\n"
-                        f"Where lost: {where_lost_location.name}\n\n"
-                        f"Claim details:\n{form.cleaned_data['detailed_description']}"
-                    )
                     claim = Claim.objects.create(
                         item=item,
                         claimant=request.user,
-                        description=description,
+                        full_name=form.cleaned_data["full_name"],
+                        email=form.cleaned_data["email"],
+                        student_id=form.cleaned_data["student_id"],
+                        relationship_to_item=form.cleaned_data["relationship_to_item"],
+                        lost_date=form.cleaned_data["lost_date"],
+                        lost_location=where_lost_location,
+                        lost_location_details=form.cleaned_data["lost_location_details"],
+                        student_card_image=form.cleaned_data["student_card_image"],
+                        description=_serialize_claim_form_data(
+                            form,
+                            lost_location_name=where_lost_location.name,
+                        ),
                     )
 
                     for uploaded_file in form.cleaned_data["proof_files"]:
@@ -636,6 +709,8 @@ def claim_create_view(request, item_id: int):
                     metadata={
                         "claim_id": claim.id,
                         "relationship_to_item": form.cleaned_data["relationship_to_item"],
+                        "student_id_submitted": bool(form.cleaned_data["student_id"]),
+                        "lost_location": where_lost_location.name,
                         "proof_count": claim.proofs.count(),
                     },
                 )
@@ -746,7 +821,7 @@ def my_received_claims_view(request):
 
     all_claims_qs = (
         Claim.objects.filter(item__reporter=request.user)
-        .select_related("item", "claimant")
+        .select_related("item", "claimant", "lost_location")
     )
 
     claims_qs = all_claims_qs
@@ -754,6 +829,9 @@ def my_received_claims_view(request):
         search_query = (
             Q(item__title__icontains=q)
             | Q(description__icontains=q)
+            | Q(full_name__icontains=q)
+            | Q(email__icontains=q)
+            | Q(student_id__icontains=q)
             | Q(claimant__username__icontains=q)
             | Q(claimant__email__icontains=q)
         )
@@ -921,7 +999,7 @@ def faq_view(request):
 @login_required
 def claim_detail_view(request, claim_id: int):
     claim = get_object_or_404(
-        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer").prefetch_related("proofs"),
+        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer", "lost_location").prefetch_related("proofs"),
         pk=claim_id,
     )
 
@@ -940,7 +1018,7 @@ def claim_detail_view(request, claim_id: int):
 @login_required
 def claim_review_view(request, claim_id: int):
     claim = get_object_or_404(
-        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer").prefetch_related("proofs"),
+        Claim.objects.select_related("item", "claimant", "item__reporter", "reviewer", "lost_location").prefetch_related("proofs"),
         pk=claim_id,
     )
 

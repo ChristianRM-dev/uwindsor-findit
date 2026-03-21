@@ -1,6 +1,8 @@
 -r base.txt
 
 # Dev tooling (optional but helpful)
+dj-database-url==2.*
+whitenoise==6.*
 ruff
 black
 pytest
