@@ -452,8 +452,9 @@ def item_detail_view(request, pk: int):
     is_guest = not request.user.is_authenticated
     claim_url = None
     if request.user.is_authenticated:
+        # Modificación: solo generar claim_url si el item NO está en estado LOST
         can_claim_item = (
-            item.status == Item.Status.LOST
+            item.status != Item.Status.LOST  # Cambiado de item.status == Item.Status.LOST
             and item.reporter_id != request.user.id
         )
         if can_claim_item:
@@ -481,16 +482,21 @@ def item_detail_view(request, pk: int):
         "images": item.images.all(),
         "is_guest": is_guest,
         "claim_url": claim_url,
-        "contact_url": reverse("chat:contact_owner", kwargs={"item_id": item.pk}) if request.user.is_authenticated and item.reporter_id != request.user.id else None,
+        "contact_url": reverse("chat:contact_owner", kwargs={
+            "item_id": item.pk}) if request.user.is_authenticated and item.reporter_id != request.user.id else None,
         "login_url": login_url,
         "register_url": register_url,
         "search_url": reverse("listings:search_results"),
         "is_owner": request.user.is_authenticated and item.reporter_id == request.user.id,
-        "edit_url": reverse("listings:item_edit", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
-        "delete_url": reverse("listings:item_delete", kwargs={"pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
+        "edit_url": reverse("listings:item_edit", kwargs={
+            "pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
+        "delete_url": reverse("listings:item_delete", kwargs={
+            "pk": item.pk}) if request.user.is_authenticated and item.reporter_id == request.user.id else None,
         "approved_claim": approved_claim,
-        "approved_claim_url": reverse("listings:claim_detail", kwargs={"claim_id": approved_claim.id}) if approved_claim else None,
-        "confirm_return_url": reverse("listings:claim_confirm_return", kwargs={"claim_id": approved_claim.id}) if can_confirm_return else None,
+        "approved_claim_url": reverse("listings:claim_detail",
+                                      kwargs={"claim_id": approved_claim.id}) if approved_claim else None,
+        "confirm_return_url": reverse("listings:claim_confirm_return",
+                                      kwargs={"claim_id": approved_claim.id}) if can_confirm_return else None,
         "can_confirm_return": can_confirm_return,
     }
     track_activity(
@@ -504,8 +510,6 @@ def item_detail_view(request, pk: int):
         },
     )
     return render(request, "listings/item_detail.html", context)
-
-
 @login_required
 def report_lost_item_view(request):
     form = ReportLostItemForm(request.POST or None, request.FILES or None)
