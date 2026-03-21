@@ -7,13 +7,14 @@
   {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
 
   <div class="row justify-content-center">
-    <div class="col-12 col-lg-8">
+    <div class="col-12 col-xl-9">
       <div class="card shadow-sm border-0">
         <div class="card-body p-4 p-lg-5">
           <h1 class="h2 mb-3">About FindIt</h1>
           <p class="text-muted mb-4">
-            FindIt is a campus lost and found platform for reporting items, browsing recent reports,
-            and reconnecting owners with their belongings.
+            FindIt is a campus lost-and-found platform built for the University of Windsor community.
+            It gives students and staff a simpler way to report missing belongings, search recent reports,
+            and reconnect owners with their items faster.
           </p>
 
           <div class="row g-4">
@@ -27,11 +28,69 @@
               </ul>
             </div>
             <div class="col-md-6">
-              <h2 class="h5">Who it is for</h2>
+              <h2 class="h5">Why it matters</h2>
               <p class="mb-0">
-                Students, staff, and visitors who need a simple way to report or recover belongings on campus.
+                Losing something on campus is stressful. FindIt helps reduce that friction by keeping the reporting,
+                searching, and claim process in one place instead of scattered across messages or bulletin boards.
               </p>
             </div>
+          </div>
+
+          <hr class="my-4">
+
+          <div class="row g-4">
+            <div class="col-md-4">
+              <div class="border rounded-3 h-100 p-4 bg-light-subtle">
+                <h2 class="h5 mb-3">1. Report</h2>
+                <p class="mb-0 text-muted">
+                  Create a lost or found item report with key details such as category, location, and description.
+                </p>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="border rounded-3 h-100 p-4 bg-light-subtle">
+                <h2 class="h5 mb-3">2. Search</h2>
+                <p class="mb-0 text-muted">
+                  Browse recent listings or search by keyword to quickly narrow down possible matches across campus.
+                </p>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="border rounded-3 h-100 p-4 bg-light-subtle">
+                <h2 class="h5 mb-3">3. Reconnect</h2>
+                <p class="mb-0 text-muted">
+                  Submit a claim and use the built-in messaging flow to coordinate with the reporter safely.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-4">
+
+          <div class="row g-4 align-items-start">
+            <div class="col-md-7">
+              <h2 class="h5">Trust and safety</h2>
+              <p class="text-muted mb-0">
+                FindIt is designed to encourage responsible recovery by supporting proof-based claims and direct,
+                item-specific communication. This helps protect users while improving the chances of returning
+                belongings to the right owner.
+              </p>
+            </div>
+            <div class="col-md-5">
+              <h2 class="h5">Who it is for</h2>
+              <p class="text-muted mb-0">
+                Students, staff, and visitors who need a clear, campus-friendly process for recovering lost items.
+              </p>
+            </div>
+          </div>
+
+          <div class="d-flex flex-wrap gap-2 mt-4">
+            <a class="btn btn-primary" href="{% url 'listings:search_results' %}">
+              Browse Listings
+            </a>
+            <a class="btn btn-outline-secondary" href="{% url 'listings:report_lost_item' %}">
+              Report an Item
+            </a>
           </div>
         </div>
       </div>

@@ -93,7 +93,7 @@
       <div class="col-lg-7">
         <div class="card">
           <div class="card-header bg-white">
-            <h2 class="h6 mb-0">Claim details</h2>
+            <h2 class="h6 mb-0">Claimant profile</h2>
           </div>
           <div class="card-body">
             <div class="row g-3">
@@ -103,19 +103,37 @@
               </div>
               <div class="col-sm-6">
                 <div class="small text-muted">Contact email</div>
-                <div class="fw-semibold">{{ parsed_claim.email|default:claim.claimant.email }}</div>
+                <div class="fw-semibold">{{ claim_profile.email }}</div>
               </div>
               <div class="col-sm-6">
                 <div class="small text-muted">Full name</div>
-                <div class="fw-semibold">{{ parsed_claim.full_name|default:"Not provided" }}</div>
+                <div class="fw-semibold">{{ claim_profile.full_name }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="small text-muted">Student ID</div>
+                <div class="fw-semibold">{{ claim_profile.student_id }}</div>
               </div>
               <div class="col-sm-6">
                 <div class="small text-muted">Relationship to item</div>
-                <div class="fw-semibold">{{ parsed_claim.relationship_to_item|default:"Not provided" }}</div>
+                <div class="fw-semibold">{{ claim_profile.relationship_to_item }}</div>
+              </div>
+              <div class="col-sm-6">
+                <div class="small text-muted">Lost date</div>
+                <div class="fw-semibold">
+                  {% if claim_profile.lost_date %}
+                    {{ claim_profile.lost_date|date:"M d, Y g:i A" }}
+                  {% else %}
+                    Not provided
+                  {% endif %}
+                </div>
               </div>
               <div class="col-12">
                 <div class="small text-muted">Where lost</div>
-                <div class="fw-semibold">{{ parsed_claim.where_lost|default:"Not provided" }}</div>
+                <div class="fw-semibold">{{ claim_profile.lost_location }}</div>
+              </div>
+              <div class="col-12">
+                <div class="small text-muted">Exact lost location</div>
+                <div class="fw-semibold">{{ claim_profile.lost_location_details }}</div>
               </div>
             </div>
           </div>
@@ -123,12 +141,54 @@
 
         <div class="card mt-3">
           <div class="card-header bg-white">
-            <h2 class="h6 mb-0">Detailed description</h2>
+            <h2 class="h6 mb-0">Ownership details</h2>
           </div>
           <div class="card-body">
-            <p class="small bg-light border rounded p-3 mb-0" style="white-space: pre-line;">{{ parsed_claim.claim_details }}</p>
+            <p class="small bg-light border rounded p-3 mb-0" style="white-space: pre-line;">{{ claim_profile.parsed_claim_details }}</p>
           </div>
         </div>
+
+        <div class="card mt-3">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Review signals</h2>
+          </div>
+          <div class="card-body">
+            <div class="row g-2">
+              {% for signal in review_signals %}
+                <div class="col-12">
+                  <div class="border rounded-3 p-3 d-flex justify-content-between align-items-start gap-3">
+                    <div>
+                      <div class="fw-semibold">{{ signal.label }}</div>
+                      <div class="small text-muted">{{ signal.help_text }}</div>
+                    </div>
+                    {% if signal.state == "good" %}
+                      <span class="badge text-bg-success">Available</span>
+                    {% else %}
+                      <span class="badge text-bg-secondary">Check manually</span>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+
+        {% if claim_profile.student_card_image %}
+          <div class="card mt-3">
+            <div class="card-header bg-white">
+              <h2 class="h6 mb-0">Student card image</h2>
+            </div>
+            <div class="card-body">
+              <div class="ratio ratio-4x3 bg-light border rounded overflow-hidden">
+                <img
+                  src="{{ claim_profile.student_card_image.url }}"
+                  alt="Student card for claim {{ claim.id }}"
+                  class="w-100 h-100 object-fit-cover"
+                >
+              </div>
+            </div>
+          </div>
+        {% endif %}
 
         {% if show_review_form %}
           <div class="card mt-3">
@@ -137,7 +197,7 @@
             </div>
             <div class="card-body">
               <p class="small text-muted">
-                Approving this claim marks the item as claimed and automatically closes other pending claims for the same item.
+                Approving this claim marks the found item as claimed and automatically closes other pending claims for the same item.
               </p>
 
               {% if review_form.non_field_errors %}

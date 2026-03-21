@@ -40,8 +40,8 @@ def review_claim(*, claim: Claim, reviewer, decision: str, reviewer_notes: str =
     if decision not in {"approve", "reject"}:
         raise ClaimReviewError("Unsupported claim review decision.")
 
-    if decision == "approve" and claim.item.status != Item.Status.LOST:
-        raise ClaimReviewError("Only items that are still marked as lost can be approved.")
+    if decision == "approve" and claim.item.status != Item.Status.FOUND:
+        raise ClaimReviewError("Only items that are still marked as found can be approved.")
 
     review_time = timezone.now()
     claim.reviewer = reviewer

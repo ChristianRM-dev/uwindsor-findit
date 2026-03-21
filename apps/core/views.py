@@ -134,6 +134,38 @@ def contact_view(request: HttpRequest) -> HttpResponse:
     return render(request, "core/contact.html", context)
 
 
+def team_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "team_members": [
+            {
+                "name": "Christian Rios Mancilla",
+                "email": "riosman@uwindsor.ca",
+            },
+            {
+                "name": "Sweatha Panneer Selvam",
+                "email": "panneers@uwindsor.ca",
+            },
+            {
+                "name": "Hong An Do",
+                "email": "doan31@uwindsor.ca",
+            },
+            {
+                "name": "Zhaojun Zhang",
+                "email": "zhang6o3@uwindsor.ca",
+            },
+            {
+                "name": "Tingwan Zhou",
+                "email": "zhou9x@uwindsor.ca",
+            },
+        ],
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Team", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/team.html", context)
+
+
 @login_required
 def notifications_view(request: HttpRequest) -> HttpResponse:
     notifications = (

@@ -130,6 +130,23 @@ class Claim(models.Model):
         on_delete=models.CASCADE,
         related_name="claims",
     )
+    full_name = models.CharField(max_length=150, blank=True)
+    email = models.EmailField(blank=True)
+    student_id = models.CharField(max_length=50, blank=True)
+    relationship_to_item = models.CharField(max_length=40, blank=True)
+    lost_date = models.DateTimeField(null=True, blank=True)
+    lost_location = models.ForeignKey(
+        CampusLocation,
+        on_delete=models.PROTECT,
+        related_name="claims_lost_here",
+        null=True,
+        blank=True,
+    )
+    lost_location_details = models.CharField(max_length=255, blank=True)
+    student_card_image = models.ImageField(
+        upload_to="claims/student_cards/%Y/%m/%d",
+        blank=True,
+    )
     description = models.TextField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     reviewer = models.ForeignKey(

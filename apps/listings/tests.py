@@ -497,8 +497,8 @@ class ClaimCreateViewTests(TestCase):
         self.location = CampusLocation.objects.create(name="Library", code="library", is_active=True)
         self.item = Item.objects.create(
             reporter=self.reporter,
-            item_type=Item.ItemType.LOST,
-            status=Item.Status.LOST,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
             title="Black Wallet",
             description="Found in study lounge.",
             category=self.category,
@@ -537,9 +537,13 @@ class ClaimCreateViewTests(TestCase):
         self.assertContains(response, "Claim form")
         self.assertContains(response, 'name="full_name"')
         self.assertContains(response, 'name="email"')
+        self.assertContains(response, 'name="student_id"')
         self.assertContains(response, 'name="relationship_to_item"')
+        self.assertContains(response, 'name="lost_date"')
         self.assertContains(response, 'name="detailed_description"')
         self.assertContains(response, 'name="where_lost_location"')
+        self.assertContains(response, 'name="lost_location_details"')
+        self.assertContains(response, 'name="student_card_image"')
         self.assertContains(response, 'name="proof_files"')
         self.assertContains(response, "Library")
         self.assertContains(response, 'aria-label="Private navigation"')
@@ -560,9 +564,13 @@ class ClaimCreateViewTests(TestCase):
         payload = {
             "full_name": "Avery Jones",
             "email": "claimant@uwindsor.ca",
+            "student_id": "110012345",
             "relationship_to_item": "Owner",
+            "lost_date": (timezone.now() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M"),
             "detailed_description": "Wallet has a blue stripe and two student cards.",
             "where_lost_location": str(self.location.pk),
+            "lost_location_details": "Quiet study room near the printers",
+            "student_card_image": self._valid_image_file("student-card.png"),
             "consent": "on",
             "proof_files": [self._valid_image_file(), self._valid_pdf_file()],
         }
@@ -575,8 +583,15 @@ class ClaimCreateViewTests(TestCase):
         created_claim = Claim.objects.get()
         self.assertEqual(created_claim.item, self.item)
         self.assertEqual(created_claim.claimant, self.user)
+        self.assertEqual(created_claim.full_name, "Avery Jones")
+        self.assertEqual(created_claim.email, "claimant@uwindsor.ca")
+        self.assertEqual(created_claim.student_id, "110012345")
+        self.assertEqual(created_claim.lost_location, self.location)
+        self.assertEqual(created_claim.lost_location_details, "Quiet study room near the printers")
+        self.assertTrue(bool(created_claim.student_card_image))
         self.assertIn("Relationship to item: Owner", created_claim.description)
         self.assertIn("Where lost: Library", created_claim.description)
+        self.assertIn("Student ID: 110012345", created_claim.description)
         self.assertEqual(ClaimProof.objects.filter(claim=created_claim).count(), 2)
         self.assertTrue(
             UserActivity.objects.filter(
@@ -594,9 +609,13 @@ class ClaimCreateViewTests(TestCase):
         payload = {
             "full_name": "Avery Jones",
             "email": "claimant@uwindsor.ca",
+            "student_id": "110012345",
             "relationship_to_item": "Owner",
+            "lost_date": (timezone.now() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M"),
             "detailed_description": "Wallet has a blue stripe and two student cards.",
             "where_lost_location": str(self.location.pk),
+            "lost_location_details": "Quiet study room near the printers",
+            "student_card_image": self._valid_image_file("student-card.png"),
             "consent": "on",
             "proof_files": [self._valid_image_file()],
         }
@@ -632,9 +651,13 @@ class ClaimCreateViewTests(TestCase):
         payload = {
             "full_name": "Avery Jones",
             "email": "claimant@uwindsor.ca",
+            "student_id": "110012345",
             "relationship_to_item": "Owner",
             "detailed_description": "Details",
             "where_lost_location": str(self.location.pk),
+            "lost_date": (timezone.now() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M"),
+            "lost_location_details": "Near the entrance",
+            "student_card_image": self._valid_image_file("student-card.png"),
             "consent": "on",
             "proof_files": bad_file,
         }
@@ -650,9 +673,13 @@ class ClaimCreateViewTests(TestCase):
         payload = {
             "full_name": "Avery Jones",
             "email": "claimant@uwindsor.ca",
+            "student_id": "110012345",
             "relationship_to_item": "Owner",
-            "detailed_description": "Details",
+            "lost_date": (timezone.now() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M"),
+            "detailed_description": "Detailed ownership description with clear identifying information.",
             "where_lost_location": str(self.location.pk),
+            "lost_location_details": "Near the entrance",
+            "student_card_image": self._valid_image_file("student-card.png"),
             "consent": "on",
             "proof_files": [
                 self._valid_image_file("a.png"),
@@ -675,16 +702,20 @@ class ClaimCreateViewTests(TestCase):
         payload = {
             "full_name": "Avery Jones",
             "email": "claimant@uwindsor.ca",
+            "student_id": "110012345",
             "relationship_to_item": "Owner",
+            "lost_date": (timezone.now() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M"),
             "detailed_description": "Wallet has a blue stripe and two student cards.",
             "where_lost_location": str(self.location.pk),
+            "lost_location_details": "Quiet study room near the printers",
+            "student_card_image": self._valid_image_file("student-card.png"),
             "consent": "on",
             "proof_files": [self._valid_image_file()],
         }
 
         response = self.client.post(self.url, data=payload, format="multipart")
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Only items with Lost status can be claimed.")
+        self.assertContains(response, "Only items with Found status can be claimed.")
         self.assertEqual(Claim.objects.count(), 0)
 
     def test_rejects_claim_for_own_reported_item(self):
@@ -695,9 +726,13 @@ class ClaimCreateViewTests(TestCase):
         payload = {
             "full_name": "Avery Jones",
             "email": "claimant@uwindsor.ca",
+            "student_id": "110012345",
             "relationship_to_item": "Owner",
+            "lost_date": (timezone.now() - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M"),
             "detailed_description": "Wallet has a blue stripe and two student cards.",
             "where_lost_location": str(self.location.pk),
+            "lost_location_details": "Quiet study room near the printers",
+            "student_card_image": self._valid_image_file("student-card.png"),
             "consent": "on",
             "proof_files": [self._valid_image_file()],
         }
@@ -831,8 +866,8 @@ class MyReceivedClaimsViewTests(TestCase):
 
         self.my_item = Item.objects.create(
             reporter=self.reporter,
-            item_type=Item.ItemType.LOST,
-            status=Item.Status.LOST,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
             title="Blue Wallet",
             description="Own reported item",
             category=self.category,
@@ -842,8 +877,8 @@ class MyReceivedClaimsViewTests(TestCase):
         )
         self.other_item = Item.objects.create(
             reporter=self.other_user,
-            item_type=Item.ItemType.LOST,
-            status=Item.Status.LOST,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
             title="Black Jacket",
             description="Other user's item",
             category=self.category,
@@ -1045,8 +1080,8 @@ class ClaimDetailViewTests(TestCase):
         self.location = CampusLocation.objects.create(name="Odette", code="odette", is_active=True)
         self.item = Item.objects.create(
             reporter=self.reporter,
-            item_type=Item.ItemType.LOST,
-            status=Item.Status.LOST,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
             title="Car Keys",
             description="Keychain with red strap",
             category=self.category,
@@ -1057,6 +1092,13 @@ class ClaimDetailViewTests(TestCase):
         self.claim = Claim.objects.create(
             item=self.item,
             claimant=self.claimant,
+            full_name="Claim Detail User",
+            email=self.claimant.email,
+            student_id="110055555",
+            relationship_to_item="Owner",
+            lost_date=timezone.now() - timedelta(days=2),
+            lost_location=self.location,
+            lost_location_details="Outside the classroom entrance",
             description="Claim details body",
             status=Claim.Status.PENDING,
         )
@@ -1097,6 +1139,8 @@ class ClaimDetailViewTests(TestCase):
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.claimant.email)
+        self.assertContains(response, "Student ID")
+        self.assertContains(response, "Review signals")
         self.assertContains(response, "Review claim")
         self.assertContains(response, f'action="{self.review_url}"')
 
@@ -1104,7 +1148,7 @@ class ClaimDetailViewTests(TestCase):
         self.client.login(username=self.admin_user.username, password="StrongPass123!")
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Claim details")
+        self.assertContains(response, "Claimant profile")
         self.assertContains(response, "Review claim")
 
     def test_unrelated_user_gets_404(self):
@@ -1193,8 +1237,8 @@ class ClaimReviewViewTests(TestCase):
         self.location = CampusLocation.objects.create(name="Review Hall", code="review-hall", is_active=True)
         self.item = Item.objects.create(
             reporter=self.reporter,
-            item_type=Item.ItemType.LOST,
-            status=Item.Status.LOST,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
             title="Student ID Wallet",
             description="Brown wallet with student ID",
             category=self.category,
@@ -1404,7 +1448,7 @@ class ClaimReviewViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Only items that are still marked as lost can be approved.")
+        self.assertContains(response, "Only items that are still marked as found can be approved.")
         self.claim.refresh_from_db()
         self.assertEqual(self.claim.status, Claim.Status.PENDING)
 
@@ -1438,7 +1482,7 @@ class ClaimReturnViewTests(TestCase):
         self.location = CampusLocation.objects.create(name="Return Hall", code="return-hall", is_active=True)
         self.item = Item.objects.create(
             reporter=self.reporter,
-            item_type=Item.ItemType.LOST,
+            item_type=Item.ItemType.FOUND,
             status=Item.Status.CLAIMED,
             title="Grey Laptop Sleeve",
             description="Claimed item waiting for handoff.",
@@ -1496,7 +1540,7 @@ class ClaimReturnViewTests(TestCase):
         self.assertEqual(self.item.status, Item.Status.CLAIMED)
 
     def test_cannot_confirm_return_when_item_is_not_claimed(self):
-        self.item.status = Item.Status.LOST
+        self.item.status = Item.Status.FOUND
         self.item.save(update_fields=["status"])
         self.client.login(username=self.reporter.username, password="StrongPass123!")
 
@@ -1505,7 +1549,7 @@ class ClaimReturnViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Only claimed items can be marked as returned.")
         self.item.refresh_from_db()
-        self.assertEqual(self.item.status, Item.Status.LOST)
+        self.assertEqual(self.item.status, Item.Status.FOUND)
 
 
 class ItemEditViewTests(TestCase):

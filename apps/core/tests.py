@@ -424,14 +424,32 @@ class StaticPageTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "About FindIt")
-        self.assertContains(response, "Report lost and found items")
+        self.assertContains(response, "1. Report")
+        self.assertContains(response, "Trust and safety")
 
     def test_contact_page_renders(self):
         response = self.client.get(reverse("core:contact"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Contact")
-        self.assertContains(response, "support@findit.local")
+        self.assertContains(response, "View Team Details")
+        self.assertContains(response, "Login or account-access issues")
+
+    def test_team_page_renders_all_members(self):
+        response = self.client.get(reverse("core:team"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Team Details")
+        self.assertContains(response, "Christian Rios Mancilla")
+        self.assertContains(response, "riosman@uwindsor.ca")
+        self.assertContains(response, "Sweatha Panneer Selvam")
+        self.assertContains(response, "panneers@uwindsor.ca")
+        self.assertContains(response, "Hong An Do")
+        self.assertContains(response, "doan31@uwindsor.ca")
+        self.assertContains(response, "Zhaojun Zhang")
+        self.assertContains(response, "zhang6o3@uwindsor.ca")
+        self.assertContains(response, "Tingwan Zhou")
+        self.assertContains(response, "zhou9x@uwindsor.ca")
 
 
 class SecuritySettingsTests(TestCase):
