@@ -292,6 +292,29 @@ class ReportFoundItemViewTests(TestCase):
         self.assertEqual(Item.objects.count(), 0)
 
 
+@override_settings(
+    STORAGES={
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+    }
+)
+class FaqViewTests(TestCase):
+    def setUp(self):
+        self.url = reverse("listings:faq")
+
+    def test_faq_reflects_current_item_and_claim_flows(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Report Lost Item")
+        self.assertContains(response, "Dashboard or My Items page")
+        self.assertContains(response, "found item's details page")
+        self.assertContains(response, "student card image")
+        self.assertContains(response, "1 to 3 ownership proof files")
+        self.assertContains(response, "removes it from public listings")
+        self.assertContains(response, "claimant, the item reporter, and authorized staff/admin users")
+
+
 class SearchAndItemActivityTests(TestCase):
     def setUp(self):
         User = get_user_model()
