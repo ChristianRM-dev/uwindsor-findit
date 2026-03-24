@@ -28,6 +28,8 @@ SEARCH_SORT_OPTIONS = (
     ("relevance", "Most relevant"),
     ("newest", "Newest first"),
     ("oldest", "Oldest first"),
+    ("event_date_desc", "Event date (newest first)"),
+    ("event_date_asc", "Event date (oldest first)"),
 )
 SEARCH_SORT_LABELS = dict(SEARCH_SORT_OPTIONS)
 
