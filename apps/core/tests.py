@@ -140,6 +140,7 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, "My Items")
         self.assertContains(response, "My Claims")
         self.assertContains(response, "Claims Received")
+        self.assertContains(response, "User History")
         self.assertContains(response, 'aria-label="Private navigation"')
         self.assertNotContains(response, "Search lost & found items...")
         self.assertNotContains(response, "Claims Recibidos")
@@ -181,6 +182,105 @@ class DashboardViewTests(TestCase):
         self.assertContains(response, f"Viewed item: {self.item.title}")
 
 
+class UserHistoryViewTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="history@uwindsor.ca",
+            email="history@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.category = Category.objects.create(
+            name="History Items", slug="history-items", is_active=True
+        )
+        self.location = CampusLocation.objects.create(
+            name="History Hall", code="history-hall", is_active=True
+        )
+        self.item = Item.objects.create(
+            reporter=self.user,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="History Notebook",
+            description="History fixture item",
+            category=self.category,
+            location=self.location,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        self.url = reverse("core:history")
+
+    def test_history_requires_authentication(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"{reverse('users:login')}?next=", response.url)
+
+    def test_history_renders_counts_and_daily_visits(self):
+        self.client.login(username=self.user.username, password="StrongPass123!")
+        session = self.client.session
+        session.save()
+        session_key = session.session_key
+
+        today_view = UserActivity.objects.create(
+            user=self.user,
+            activity_type=UserActivity.ActivityType.PAGE_VIEW,
+            page_path=reverse("core:home"),
+            session_key=session_key,
+        )
+        older_view = UserActivity.objects.create(
+            user=self.user,
+            activity_type=UserActivity.ActivityType.PAGE_VIEW,
+            page_path=reverse("core:dashboard"),
+            session_key=session_key,
+        )
+        UserActivity.objects.filter(pk=older_view.pk).update(
+            created_at=timezone.now() - timedelta(days=3)
+        )
+        UserActivity.objects.create(
+            user=self.user,
+            activity_type=UserActivity.ActivityType.SEARCH,
+            page_path=reverse("listings:search_results"),
+            search_query="wallet",
+            session_key=session_key,
+            metadata={"result_count": 2, "status": "FOUND"},
+        )
+        UserActivity.objects.create(
+            user=self.user,
+            activity_type=UserActivity.ActivityType.ITEM_VIEW,
+            page_path=reverse("listings:item_detail_public", kwargs={"pk": self.item.pk}),
+            item=self.item,
+            session_key=session_key,
+        )
+        UserActivity.objects.create(
+            user=self.user,
+            activity_type=UserActivity.ActivityType.MESSAGE,
+            page_path="/messages/",
+            item=self.item,
+            session_key=session_key,
+            metadata={"context": "item_thread", "conversation_id": 3},
+        )
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "User History")
+        self.assertContains(response, "Visits Per Day")
+        self.assertContains(response, "Recent Tracked Activity")
+        self.assertEqual(response.context["page_views_today"], 1)
+        self.assertEqual(response.context["page_views_last_7_days"], 2)
+        self.assertEqual(response.context["search_count"], 1)
+        self.assertEqual(response.context["item_view_count"], 1)
+        self.assertEqual(response.context["message_count"], 1)
+        self.assertGreaterEqual(response.context["current_session_activity_count"], 4)
+        self.assertContains(response, 'href="%s"' % reverse("core:history"))
+        self.assertTrue(
+            UserActivity.objects.filter(
+                user=self.user,
+                activity_type=UserActivity.ActivityType.PAGE_VIEW,
+                page_path=self.url,
+            ).exists()
+        )
+
+
 class HomePublicNavbarTests(TestCase):
     def setUp(self):
         User = get_user_model()
@@ -214,6 +314,21 @@ class HomePublicNavbarTests(TestCase):
                 page_path=self.url,
             ).exists()
         )
+
+    def test_footer_links_to_privacy_and_terms_pages(self):
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f'href="{reverse("core:privacy")}"')
+        self.assertContains(response, f'href="{reverse("core:terms")}"')
+
+        privacy_response = self.client.get(reverse("core:privacy"))
+        self.assertEqual(privacy_response.status_code, 200)
+        self.assertContains(privacy_response, "Privacy")
+
+        terms_response = self.client.get(reverse("core:terms"))
+        self.assertEqual(terms_response.status_code, 200)
+        self.assertContains(terms_response, "Terms of Use")
 
 
 class NotificationViewTests(TestCase):

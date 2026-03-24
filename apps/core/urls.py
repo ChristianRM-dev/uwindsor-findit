@@ -9,8 +9,11 @@ urlpatterns = [
     path("", views.home_view, name="home"),
     path("about/", views.about_view, name="about"),
     path("contact/", views.contact_view, name="contact"),
+    path("privacy/", views.privacy_view, name="privacy"),
+    path("terms/", views.terms_view, name="terms"),
     path("team/", views.team_view, name="team"),
     path("dashboard/", views.dashboard_view, name="dashboard"),
+    path("history/", views.history_view, name="history"),
     path("notifications/", views.notifications_view, name="notifications"),
     path(
         "notifications/mark-all-read/",

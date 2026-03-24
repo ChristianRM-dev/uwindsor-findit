@@ -74,6 +74,8 @@ class UserActivity(models.Model):
             "/": "Visited home page",
             "/dashboard/": "Visited dashboard",
             "/search": "Opened search",
+            "/history/": "Opened history",
+            "/notifications/": "Opened notifications",
         }
         return page_labels.get(self.page_path, "Visited a page")
 

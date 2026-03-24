@@ -1,12 +1,15 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count
+from django.db.models.functions import TruncDate
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
+from django.utils import timezone
 
 from apps.core.models import Notification, UserActivity
 from apps.core.services import mark_all_notifications_as_read, track_activity
@@ -100,6 +103,11 @@ def dashboard_view(request: HttpRequest) -> HttpResponse:
         "pending_received_claims": pending_received_claims,
         "my_pending_claims": my_pending_claims,
         "my_items_count": my_items_count,
+        "today_page_views": UserActivity.objects.filter(
+            user=request.user,
+            activity_type=UserActivity.ActivityType.PAGE_VIEW,
+            created_at__date=timezone.localdate(),
+        ).count(),
         "recent_activities": recent_activities,
         "breadcrumb_items": [
             {"label": "Home", "url": reverse("core:home"), "active": False},
@@ -134,6 +142,26 @@ def contact_view(request: HttpRequest) -> HttpResponse:
     return render(request, "core/contact.html", context)
 
 
+def privacy_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Privacy", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/privacy.html", context)
+
+
+def terms_view(request: HttpRequest) -> HttpResponse:
+    context = {
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Terms", "url": None, "active": True},
+        ],
+    }
+    return render(request, "core/terms.html", context)
+
+
 def team_view(request: HttpRequest) -> HttpResponse:
     context = {
         "team_members": [
@@ -164,6 +192,84 @@ def team_view(request: HttpRequest) -> HttpResponse:
         ],
     }
     return render(request, "core/team.html", context)
+
+
+@login_required
+def history_view(request: HttpRequest) -> HttpResponse:
+    if not request.session.session_key:
+        request.session.save()
+
+    activities_qs = UserActivity.objects.filter(user=request.user).select_related("item")
+    recent_activities = list(activities_qs.order_by("-created_at")[:25])
+    today = timezone.localdate()
+    start_date = today - timedelta(days=6)
+
+    daily_page_views_qs = (
+        activities_qs.filter(
+            activity_type=UserActivity.ActivityType.PAGE_VIEW,
+            created_at__date__gte=start_date,
+        )
+        .annotate(day=TruncDate("created_at"))
+        .values("day")
+        .annotate(count=Count("id"))
+        .order_by("day")
+    )
+    counts_by_day = {entry["day"]: entry["count"] for entry in daily_page_views_qs}
+    max_daily_visits = max(counts_by_day.values(), default=1)
+
+    daily_page_views = []
+    for offset in range(7):
+        current_day = start_date + timedelta(days=offset)
+        visit_count = counts_by_day.get(current_day, 0)
+        daily_page_views.append(
+            {
+                "date": current_day,
+                "count": visit_count,
+                "bar_width": int((visit_count / max_daily_visits) * 100) if visit_count else 0,
+            }
+        )
+
+    context = {
+        "page_views_today": activities_qs.filter(
+            activity_type=UserActivity.ActivityType.PAGE_VIEW,
+            created_at__date=today,
+        ).count(),
+        "page_views_last_7_days": activities_qs.filter(
+            activity_type=UserActivity.ActivityType.PAGE_VIEW,
+            created_at__date__gte=start_date,
+        ).count(),
+        "search_count": activities_qs.filter(
+            activity_type=UserActivity.ActivityType.SEARCH
+        ).count(),
+        "item_view_count": activities_qs.filter(
+            activity_type=UserActivity.ActivityType.ITEM_VIEW
+        ).count(),
+        "claim_activity_count": activities_qs.filter(
+            activity_type__in=[
+                UserActivity.ActivityType.CLAIM_SUBMISSION,
+                UserActivity.ActivityType.CLAIM_REVIEW,
+            ]
+        ).count(),
+        "message_count": activities_qs.filter(
+            activity_type=UserActivity.ActivityType.MESSAGE
+        ).count(),
+        "current_session_activity_count": activities_qs.filter(
+            session_key=request.session.session_key or "",
+        ).count(),
+        "daily_page_views": daily_page_views,
+        "recent_activities": recent_activities,
+        "breadcrumb_items": [
+            {"label": "Home", "url": reverse("core:home"), "active": False},
+            {"label": "Dashboard", "url": reverse("core:dashboard"), "active": False},
+            {"label": "User History", "url": None, "active": True},
+        ],
+    }
+    track_activity(
+        request,
+        UserActivity.ActivityType.PAGE_VIEW,
+        metadata={"page": "history"},
+    )
+    return render(request, "core/history.html", context)
 
 
 @login_required

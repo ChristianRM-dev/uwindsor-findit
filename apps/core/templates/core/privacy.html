@@ -1,0 +1,47 @@
+{% extends "layouts/public_base.html" %}
+
+{% block title %}Privacy | FindIt{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+  <div class="row justify-content-center">
+    <div class="col-12 col-xl-9">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4 p-lg-5">
+          <h1 class="h2 mb-3">Privacy</h1>
+          <p class="text-muted mb-4">
+            FindIt stores the information needed to help users report items, verify ownership, and review claim activity.
+            This page explains, at a project level, what user data is handled inside the platform.
+          </p>
+
+          <div class="row g-4">
+            <div class="col-md-6">
+              <h2 class="h5">What we store</h2>
+              <ul class="mb-0 text-muted">
+                <li>Account information such as name, email, student ID, and phone number</li>
+                <li>Item report details, uploaded photos, and claim proof files</li>
+                <li>Activity records such as searches, page visits, claims, and messages</li>
+              </ul>
+            </div>
+            <div class="col-md-6">
+              <h2 class="h5">Why we store it</h2>
+              <ul class="mb-0 text-muted">
+                <li>To connect owners with found items</li>
+                <li>To support claim review and fraud prevention</li>
+                <li>To provide user history and notification features</li>
+              </ul>
+            </div>
+            <div class="col-12">
+              <div class="alert alert-light border mb-0">
+                This is a course project privacy summary rather than a production legal policy.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
