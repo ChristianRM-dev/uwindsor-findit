@@ -286,8 +286,8 @@ class AdminPanelTests(TestCase):
         self.location = CampusLocation.objects.create(name="Admin Hall", code="admin-hall", is_active=True)
         self.item = Item.objects.create(
             reporter=self.owner,
-            item_type=Item.ItemType.LOST,
-            status=Item.Status.LOST,
+            item_type=Item.ItemType.FOUND,
+            status=Item.Status.FOUND,
             title="Admin Test Wallet",
             description="Wallet used for admin panel tests.",
             category=self.category,
@@ -418,7 +418,7 @@ class AdminPanelTests(TestCase):
         self.assertEqual(self.pending_claim.status, Claim.Status.REJECTED)
         self.assertEqual(self.pending_claim.reviewer, self.admin_user)
         self.assertEqual(self.pending_claim.reviewer_notes, "Rejected in Django admin.")
-        self.assertEqual(self.item.status, Item.Status.LOST)
+        self.assertEqual(self.item.status, Item.Status.FOUND)
         self.assertIsNone(self.item.claimed_by)
         self.assertTrue(
             Notification.objects.filter(

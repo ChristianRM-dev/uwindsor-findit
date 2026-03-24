@@ -1370,7 +1370,7 @@ class ClaimReviewViewTests(TestCase):
 
         self.assertEqual(self.claim.status, Claim.Status.REJECTED)
         self.assertEqual(self.claim.reviewer, self.reporter)
-        self.assertEqual(self.item.status, Item.Status.LOST)
+        self.assertEqual(self.item.status, Item.Status.FOUND)
         self.assertIsNone(self.item.claimed_by)
         self.assertTrue(
             UserActivity.objects.filter(

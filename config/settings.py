@@ -56,6 +56,7 @@ DEFAULT_SECRET_KEY = (
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool("DJANGO_DEBUG", True)
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", DEFAULT_SECRET_KEY)
+RUNNING_TESTS = "test" in sys.argv or os.getenv("PYTEST_CURRENT_TEST") is not None
 
 if not DEBUG and SECRET_KEY == DEFAULT_SECRET_KEY:
     raise ImproperlyConfigured(
@@ -197,12 +198,20 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+USE_MANIFEST_STATICFILES = env_bool(
+    "DJANGO_USE_MANIFEST_STATICFILES",
+    not DEBUG and not RUNNING_TESTS,
+)
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": (
+            "whitenoise.storage.CompressedManifestStaticFilesStorage"
+            if USE_MANIFEST_STATICFILES
+            else "django.contrib.staticfiles.storage.StaticFilesStorage"
+        ),
     },
 }
 
