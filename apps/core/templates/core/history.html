@@ -1,0 +1,133 @@
+{% extends "layouts/private_base.html" %}
+
+{% block title %}User History | FindIt{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-lg-10">
+    {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+    <div class="d-flex align-items-start align-items-md-center justify-content-between gap-3 flex-column flex-md-row mb-4">
+      <div>
+        <h1 class="h4 mb-1">User History</h1>
+        <div class="text-muted small">Track your visits, searches, claims, messages, and other activity recorded in this session-aware history.</div>
+      </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-lg-4 col-xl-2">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="small text-muted mb-1">Today</div>
+            <div class="h4 mb-0">{{ page_views_today }}</div>
+            <div class="small text-muted">Page views</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-4 col-xl-2">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="small text-muted mb-1">Last 7 days</div>
+            <div class="h4 mb-0">{{ page_views_last_7_days }}</div>
+            <div class="small text-muted">Page views</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-4 col-xl-2">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="small text-muted mb-1">Searches</div>
+            <div class="h4 mb-0">{{ search_count }}</div>
+            <div class="small text-muted">Tracked queries</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-4 col-xl-2">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="small text-muted mb-1">Item views</div>
+            <div class="h4 mb-0">{{ item_view_count }}</div>
+            <div class="small text-muted">Viewed listings</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-4 col-xl-2">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="small text-muted mb-1">Claims</div>
+            <div class="h4 mb-0">{{ claim_activity_count }}</div>
+            <div class="small text-muted">Submitted or reviewed</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-lg-4 col-xl-2">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="small text-muted mb-1">This session</div>
+            <div class="h4 mb-0">{{ current_session_activity_count }}</div>
+            <div class="small text-muted">Actions recorded</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row g-4">
+      <div class="col-12 col-xl-5">
+        <div class="card h-100">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Visits Per Day</h2>
+          </div>
+          <div class="card-body">
+            {% if daily_page_views %}
+              <div class="d-flex flex-column gap-3">
+                {% for day in daily_page_views %}
+                  <div>
+                    <div class="d-flex justify-content-between small mb-1">
+                      <span>{{ day.date|date:"M d" }}</span>
+                      <span class="text-muted">{{ day.count }} visit(s)</span>
+                    </div>
+                    <div class="progress" role="progressbar" aria-label="Visits for {{ day.date|date:'M d' }}" aria-valuenow="{{ day.count }}" aria-valuemin="0" aria-valuemax="100" style="height: 10px;">
+                      <div class="progress-bar" style="width: {% if day.bar_width %}{{ day.bar_width }}{% else %}4{% endif %}%"></div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="text-muted mb-0">No visits have been tracked yet.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-xl-7">
+        <div class="card h-100">
+          <div class="card-header bg-white">
+            <h2 class="h6 mb-0">Recent Tracked Activity</h2>
+          </div>
+          <div class="card-body">
+            {% if recent_activities %}
+              <div class="list-group list-group-flush">
+                {% for activity in recent_activities %}
+                  <div class="list-group-item px-0">
+                    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                      <div>
+                        <div class="fw-semibold">{{ activity.display_title }}</div>
+                        {% if activity.display_detail %}
+                          <div class="small text-muted">{{ activity.display_detail }}</div>
+                        {% endif %}
+                      </div>
+                      <div class="small text-muted">{{ activity.created_at|date:"M d, Y g:i A" }}</div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+            {% else %}
+              <p class="text-muted mb-0">Your tracked activity will appear here after you browse, search, message, or submit claims.</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

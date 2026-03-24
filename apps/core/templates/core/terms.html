@@ -1,0 +1,47 @@
+{% extends "layouts/public_base.html" %}
+
+{% block title %}Terms | FindIt{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  {% include "partials/breadcrumbs.html" with breadcrumb_items=breadcrumb_items %}
+
+  <div class="row justify-content-center">
+    <div class="col-12 col-xl-9">
+      <div class="card shadow-sm border-0">
+        <div class="card-body p-4 p-lg-5">
+          <h1 class="h2 mb-3">Terms of Use</h1>
+          <p class="text-muted mb-4">
+            FindIt is designed for responsible lost-and-found reporting within the University of Windsor community.
+            By using the site, users are expected to provide truthful information and respectful communication.
+          </p>
+
+          <div class="row g-4">
+            <div class="col-md-6">
+              <h2 class="h5">User expectations</h2>
+              <ul class="mb-0 text-muted">
+                <li>Provide accurate item and claim details</li>
+                <li>Upload proof only for legitimate ownership verification</li>
+                <li>Use messaging and claims respectfully</li>
+              </ul>
+            </div>
+            <div class="col-md-6">
+              <h2 class="h5">Platform rules</h2>
+              <ul class="mb-0 text-muted">
+                <li>False claims may be rejected or flagged by staff/admin users</li>
+                <li>Public listings can be hidden or reviewed when needed</li>
+                <li>Course-project deployments may reset sample data during development</li>
+              </ul>
+            </div>
+            <div class="col-12">
+              <div class="alert alert-light border mb-0">
+                These terms summarize expected use for the course project and do not replace an institutional legal agreement.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
