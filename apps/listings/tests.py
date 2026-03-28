@@ -10,12 +10,142 @@ from PIL import Image
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from apps.core.models import Notification, UserActivity
+from apps.listings.buildings import (
+    BUILDING_EMPTY_LABEL,
+    OFFICIAL_CAMPUS_BUILDINGS,
+    get_active_campus_location_queryset,
+    sync_official_campus_locations,
+)
+from apps.listings.forms import ClaimCreateForm, ItemEditForm, ReportLostItemForm
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
+
+
+class OfficialCampusLocationCatalogTests(TestCase):
+    def setUp(self):
+        User = get_user_model()
+        self.reporter = User.objects.create_user(
+            username="catalog-owner@uwindsor.ca",
+            email="catalog-owner@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.claimant = User.objects.create_user(
+            username="catalog-claimant@uwindsor.ca",
+            email="catalog-claimant@uwindsor.ca",
+            password="StrongPass123!",
+        )
+        self.category = Category.objects.create(name="Catalog Docs", slug="catalog-docs", is_active=True)
+
+    def test_sync_official_campus_locations_merges_legacy_duplicates(self):
+        legacy_caw = CampusLocation.objects.get(code="caw-student-centre")
+        legacy_caw.name = "CAW Student Centre"
+        legacy_caw.is_active = False
+        legacy_caw.save(update_fields=["name", "is_active", "updated_at"])
+        duplicate_caw = CampusLocation.objects.create(
+            name="C.A.W. Student Centre",
+            code="caw-student-centre-duplicate",
+            is_active=True,
+        )
+        item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Duplicate location item",
+            description="Legacy location duplicate fixture.",
+            category=self.category,
+            location=duplicate_caw,
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        claim = Claim.objects.create(
+            item=item,
+            claimant=self.claimant,
+            description="Legacy claim duplicate fixture.",
+            lost_location=duplicate_caw,
+        )
+
+        stats = sync_official_campus_locations()
+
+        canonical_caw = CampusLocation.objects.get(code="caw-student-centre")
+        item.refresh_from_db()
+        claim.refresh_from_db()
+
+        self.assertEqual(stats["merged_duplicates"], 1)
+        self.assertEqual(stats["reactivated"], 1)
+        self.assertEqual(CampusLocation.objects.filter(name="C.A.W. Student Centre").count(), 1)
+        self.assertEqual(CampusLocation.objects.count(), len(OFFICIAL_CAMPUS_BUILDINGS))
+        self.assertEqual(canonical_caw.pk, legacy_caw.pk)
+        self.assertTrue(canonical_caw.is_active)
+        self.assertEqual(item.location, canonical_caw)
+        self.assertEqual(claim.lost_location, canonical_caw)
+
+    def test_seed_command_creates_official_catalog_and_official_sample_locations(self):
+        output = io.StringIO()
+
+        call_command("seed_minimal_catalogs", stdout=output)
+
+        self.assertEqual(CampusLocation.objects.count(), len(OFFICIAL_CAMPUS_BUILDINGS))
+        self.assertTrue(CampusLocation.objects.filter(name="C.A.W. Student Centre", code="caw-student-centre").exists())
+        self.assertTrue(CampusLocation.objects.filter(name="HK Building", code="human-kinetics").exists())
+        self.assertTrue(
+            CampusLocation.objects.filter(
+                name="Centre For Engineering Innovation",
+                code="engineering-building",
+            ).exists()
+        )
+        self.assertTrue(CampusLocation.objects.filter(name="Assumption Chapel", code="assumption-hall").exists())
+        self.assertEqual(Item.objects.get(title="Blue Hydro Flask Bottle").location.name, "HK Building")
+        self.assertEqual(
+            Item.objects.get(title="TI-84 Calculator").location.name,
+            "Centre For Engineering Innovation",
+        )
+
+    def test_forms_and_search_use_same_building_catalog(self):
+        sync_official_campus_locations()
+
+        report_form = ReportLostItemForm()
+        claim_form = ClaimCreateForm()
+        item = Item.objects.create(
+            reporter=self.reporter,
+            item_type=Item.ItemType.LOST,
+            status=Item.Status.LOST,
+            title="Shared selector item",
+            description="Shared selector fixture.",
+            category=self.category,
+            location=CampusLocation.objects.get(code="leddy-library"),
+            event_date=timezone.now() - timedelta(days=1),
+            is_visible=True,
+        )
+        edit_form = ItemEditForm(instance=item)
+
+        search_response = self.client.get(reverse("listings:search_results"))
+
+        expected_codes = list(get_active_campus_location_queryset().values_list("code", flat=True))
+        self.assertEqual(
+            list(report_form.fields["location"].queryset.values_list("code", flat=True)),
+            expected_codes,
+        )
+        self.assertEqual(
+            list(claim_form.fields["where_lost_location"].queryset.values_list("code", flat=True)),
+            expected_codes,
+        )
+        self.assertEqual(
+            list(edit_form.fields["location"].queryset.values_list("code", flat=True)),
+            expected_codes,
+        )
+        self.assertEqual(
+            list(search_response.context["locations"].values_list("code", flat=True)),
+            expected_codes,
+        )
+        self.assertEqual(report_form.fields["location"].empty_label, BUILDING_EMPTY_LABEL)
+        self.assertEqual(claim_form.fields["where_lost_location"].empty_label, BUILDING_EMPTY_LABEL)
+        self.assertEqual(edit_form.fields["location"].empty_label, BUILDING_EMPTY_LABEL)
+        self.assertContains(search_response, BUILDING_EMPTY_LABEL)
 
 
 class ReportLostItemViewTests(TestCase):
@@ -37,7 +167,7 @@ class ReportLostItemViewTests(TestCase):
         )
 
         self.category = Category.objects.create(name="Electronics", slug="electronics", is_active=True)
-        self.location = CampusLocation.objects.create(name="Leddy Library", code="leddy-library", is_active=True)
+        self.location = CampusLocation.objects.get(code="leddy-library")
 
     def _valid_image_file(self, name: str = "photo.png") -> SimpleUploadedFile:
         image = Image.new("RGB", (50, 50), color=(120, 120, 120))
@@ -72,6 +202,7 @@ class ReportLostItemViewTests(TestCase):
         self.assertContains(response, 'name="location"')
         self.assertContains(response, 'name="description"')
         self.assertContains(response, 'name="photos"')
+        self.assertContains(response, BUILDING_EMPTY_LABEL)
         self.assertContains(response, f'href="{self.dashboard_url}"')
 
     def test_creates_lost_item_and_image_and_redirects(self):
@@ -436,6 +567,7 @@ class SearchResultsEnhancementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="date_from"')
         self.assertContains(response, 'name="date_to"')
+        self.assertContains(response, BUILDING_EMPTY_LABEL)
         self.assertContains(response, "Most relevant")
         self.assertContains(response, "Trending categories")
         self.assertContains(response, "Suggestions")
@@ -569,6 +701,7 @@ class ClaimCreateViewTests(TestCase):
         self.assertContains(response, 'name="student_card_image"')
         self.assertContains(response, 'name="proof_files"')
         self.assertContains(response, "Library")
+        self.assertContains(response, BUILDING_EMPTY_LABEL)
         self.assertContains(response, 'aria-label="Private navigation"')
         self.assertContains(response, "Claims Received")
         self.assertNotContains(response, "Search lost & found items...")
@@ -781,7 +914,7 @@ class MyClaimsViewTests(TestCase):
         )
 
         self.category = Category.objects.create(name="Electronics", slug="electronics", is_active=True)
-        self.location = CampusLocation.objects.create(name="Leddy Library", code="leddy-library", is_active=True)
+        self.location = CampusLocation.objects.get(code="leddy-library")
         self.url = reverse("listings:my_claims")
 
     def _make_item(self, title: str) -> Item:
@@ -978,7 +1111,7 @@ class MyItemsViewTests(TestCase):
         )
 
         self.category = Category.objects.create(name="Electronics 2", slug="electronics-2", is_active=True)
-        self.location = CampusLocation.objects.create(name="Essex Hall", code="essex-hall", is_active=True)
+        self.location = CampusLocation.objects.get(code="essex-hall")
 
         self.item_1 = Item.objects.create(
             reporter=self.user,

@@ -1,0 +1,38 @@
+{% if label %}
+  <label for="{{ input_id }}" class="{{ label_class|default:'form-label' }}">{{ label }}</label>
+{% endif %}
+<select
+  id="{{ input_id }}"
+  name="{{ input_name }}"
+  class="{{ select_class|default:'form-select' }}{% if errors %} is-invalid{% endif %}"
+  {% if required %}required{% endif %}
+>
+  <option value="">{{ empty_label|default:"Select building" }}</option>
+  {% for building in options %}
+    {% if use_code_values %}
+      {% with option_value=building.code %}
+        <option
+          value="{{ option_value }}"
+          {% if selected_value|stringformat:"s" == option_value|stringformat:"s" %}selected{% endif %}
+        >
+          {{ building.name }}
+        </option>
+      {% endwith %}
+    {% else %}
+      {% with option_value=building.pk %}
+        <option
+          value="{{ option_value }}"
+          {% if selected_value|stringformat:"s" == option_value|stringformat:"s" %}selected{% endif %}
+        >
+          {{ building.name }}
+        </option>
+      {% endwith %}
+    {% endif %}
+  {% endfor %}
+</select>
+{% if help_text %}
+  <div class="form-text">{{ help_text }}</div>
+{% endif %}
+{% if errors %}
+  <div class="invalid-feedback d-block">{{ errors|join:", " }}</div>
+{% endif %}

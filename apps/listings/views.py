@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from apps.core.models import UserActivity
 from apps.core.services import notify_claim_reviewed, notify_claim_submitted, notify_item_returned, track_activity
+from apps.listings.buildings import get_active_campus_location_queryset
 from apps.listings.forms import (
     ClaimCreateForm,
     ClaimReviewForm,
@@ -336,7 +337,7 @@ def _build_search_suggestions(query: str):
         suggestions.append(
             {
                 "label": location.name,
-                "hint": "Filter by location",
+                "hint": "Filter by building",
                 "url": _search_url_for_params(location=location.code, sort="newest"),
             }
         )
@@ -421,7 +422,7 @@ def search_results_view(request):
     if category_slug:
         query_chips.append({"label": "category", "value": selected_category.name if selected_category else category_slug})
     if location_code:
-        query_chips.append({"label": "location", "value": selected_location.name if selected_location else location_code})
+        query_chips.append({"label": "building", "value": selected_location.name if selected_location else location_code})
     if status:
         query_chips.append({"label": "status", "value": status})
     if date_from_raw:
@@ -452,7 +453,7 @@ def search_results_view(request):
         "page_obj": page_obj,
         "items": page_obj.object_list,
         "categories": Category.objects.filter(is_active=True),
-        "locations": CampusLocation.objects.filter(is_active=True),
+        "locations": get_active_campus_location_queryset(),
         "trending_categories": _get_trending_categories(),
         "search_suggestions": search_suggestions,
         "search_hint_values": [suggestion["label"] for suggestion in search_suggestions],

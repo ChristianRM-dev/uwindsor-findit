@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
+from apps.listings.buildings import sync_official_campus_locations
 from apps.listings.models import CampusLocation, Category, Item
 
 
@@ -20,25 +21,13 @@ DEFAULT_CATEGORIES = [
     "Other",
 ]
 
-
-DEFAULT_LOCATIONS = [
-    ("Leddy Library", "leddy-library"),
-    ("Odette Building", "odette-building"),
-    ("CAW Student Centre", "caw-student-centre"),
-    ("Lambton Tower", "lambton-tower"),
-    ("Toldo Health Education Centre", "toldo-health-centre"),
-    ("Human Kinetics Building", "human-kinetics"),
-    ("Assumption Hall", "assumption-hall"),
-    ("Engineering Building", "engineering-building"),
-]
-
 SAMPLE_ITEMS = [
     {
         "title": "Black Wallet with Student ID",
         "item_type": Item.ItemType.LOST,
         "status": Item.Status.LOST,
         "category_name": "Accessories",
-        "location_name": "CAW Student Centre",
+        "location_code": "caw-student-centre",
         "days_ago": 2,
         "description": "Black leather wallet with UWindsor card and transit pass.",
     },
@@ -47,7 +36,7 @@ SAMPLE_ITEMS = [
         "item_type": Item.ItemType.FOUND,
         "status": Item.Status.FOUND,
         "category_name": "Electronics",
-        "location_name": "Leddy Library",
+        "location_code": "leddy-library",
         "days_ago": 1,
         "description": "Found near the second floor study area.",
     },
@@ -56,7 +45,7 @@ SAMPLE_ITEMS = [
         "item_type": Item.ItemType.LOST,
         "status": Item.Status.LOST,
         "category_name": "Water Bottles",
-        "location_name": "Human Kinetics Building",
+        "location_code": "human-kinetics",
         "days_ago": 3,
         "description": "Blue 24oz bottle with stickers.",
     },
@@ -65,7 +54,7 @@ SAMPLE_ITEMS = [
         "item_type": Item.ItemType.FOUND,
         "status": Item.Status.FOUND,
         "category_name": "Electronics",
-        "location_name": "Engineering Building",
+        "location_code": "engineering-building",
         "days_ago": 5,
         "description": "Calculator found in classroom after evening lecture.",
     },
@@ -78,7 +67,6 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         categories_created = 0
-        locations_created = 0
         items_created = 0
 
         for category_name in DEFAULT_CATEGORIES:
@@ -92,16 +80,7 @@ class Command(BaseCommand):
             if created:
                 categories_created += 1
 
-        for location_name, location_code in DEFAULT_LOCATIONS:
-            location, created = CampusLocation.objects.get_or_create(
-                name=location_name,
-                defaults={"code": location_code, "is_active": True},
-            )
-            if not created and location.code != location_code:
-                location.code = location_code
-                location.save(update_fields=["code"])
-            if created:
-                locations_created += 1
+        location_stats = sync_official_campus_locations()
 
         user_model = get_user_model()
         reporter = user_model.objects.order_by("id").first()
@@ -120,7 +99,7 @@ class Command(BaseCommand):
 
         for sample in SAMPLE_ITEMS:
             category = Category.objects.get(name=sample["category_name"])
-            location = CampusLocation.objects.get(name=sample["location_name"])
+            location = CampusLocation.objects.get(code=sample["location_code"])
             event_date = timezone.now() - timedelta(days=sample["days_ago"])
 
             _, created = Item.objects.get_or_create(
@@ -141,5 +120,8 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS("Seed completed."))
         self.stdout.write(f"Categories created: {categories_created}")
-        self.stdout.write(f"Locations created: {locations_created}")
+        self.stdout.write(f"Locations created: {location_stats['created']}")
+        self.stdout.write(f"Locations renamed: {location_stats['renamed']}")
+        self.stdout.write(f"Locations reactivated: {location_stats['reactivated']}")
+        self.stdout.write(f"Location duplicates merged: {location_stats['merged_duplicates']}")
         self.stdout.write(f"Items created: {items_created}")

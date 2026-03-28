@@ -3,6 +3,7 @@ from __future__ import annotations
 from django import forms
 from django.utils import timezone
 
+from apps.listings.buildings import BUILDING_EMPTY_LABEL, get_active_campus_location_queryset
 from apps.listings.models import CampusLocation, Category, Item, ItemImage
 
 
@@ -88,7 +89,8 @@ class ReportLostItemForm(forms.ModelForm):
         self.item_type = kwargs.pop("item_type", self.item_type)
         super().__init__(*args, **kwargs)
         self.fields["category"].queryset = Category.objects.filter(is_active=True)
-        self.fields["location"].queryset = CampusLocation.objects.filter(is_active=True)
+        self.fields["location"].queryset = get_active_campus_location_queryset()
+        self.fields["location"].empty_label = BUILDING_EMPTY_LABEL
         self.fields["event_date"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["event_date"].help_text = "Approximate date is fine."
         self.fields["event_date"].widget.attrs["max"] = timezone.localtime().strftime("%Y-%m-%dT%H:%M")
@@ -222,7 +224,7 @@ class ClaimCreateForm(forms.Form):
     where_lost_location = forms.ModelChoiceField(
         required=True,
         queryset=CampusLocation.objects.none(),
-        empty_label="Select location",
+        empty_label=BUILDING_EMPTY_LABEL,
         widget=forms.Select(attrs={"class": "form-select"}),
     )
     lost_location_details = forms.CharField(
@@ -260,7 +262,8 @@ class ClaimCreateForm(forms.Form):
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["where_lost_location"].queryset = CampusLocation.objects.filter(is_active=True)
+        self.fields["where_lost_location"].queryset = get_active_campus_location_queryset()
+        self.fields["where_lost_location"].empty_label = BUILDING_EMPTY_LABEL
         self.fields["where_lost_location"].label = "Where did you lose it?"
         self.fields["lost_date"].label = "When did you lose it?"
         self.fields["lost_date"].help_text = "Approximate date and time is okay."
@@ -441,7 +444,8 @@ class ItemEditForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["category"].queryset = Category.objects.filter(is_active=True)
-        self.fields["location"].queryset = CampusLocation.objects.filter(is_active=True)
+        self.fields["location"].queryset = get_active_campus_location_queryset()
+        self.fields["location"].empty_label = BUILDING_EMPTY_LABEL
         self.fields["event_date"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.fields["event_date"].help_text = "Approximate date is fine."
         self.fields["event_date"].widget.attrs["max"] = timezone.localtime().strftime("%Y-%m-%dT%H:%M")

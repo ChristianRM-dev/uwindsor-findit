@@ -203,26 +203,7 @@
               </div>
 
               <div class="mb-3">
-                <label for="id_where_lost_location" class="form-label">Where did you lose it?*</label>
-                <select
-                  id="id_where_lost_location"
-                  name="where_lost_location"
-                  class="form-select{% if form.where_lost_location.errors %} is-invalid{% endif %}"
-                  required
-                >
-                  <option value="">Select location</option>
-                  {% for location in form.fields.where_lost_location.queryset %}
-                    <option
-                      value="{{ location.pk }}"
-                      {% if form.where_lost_location.value|stringformat:"s" == location.pk|stringformat:"s" %}selected{% endif %}
-                    >
-                      {{ location.name }}
-                    </option>
-                  {% endfor %}
-                </select>
-                {% if form.where_lost_location.errors %}
-                  <div class="invalid-feedback d-block">{{ form.where_lost_location.errors|join:", " }}</div>
-                {% endif %}
+                {% include "partials/building_select.html" with label=form.where_lost_location.label input_id=form.where_lost_location.id_for_label input_name=form.where_lost_location.html_name options=form.fields.where_lost_location.queryset selected_value=form.where_lost_location.value required=form.fields.where_lost_location.required errors=form.where_lost_location.errors empty_label=form.fields.where_lost_location.empty_label %}
               </div>
 
               <div class="mb-3">
