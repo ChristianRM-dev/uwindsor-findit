@@ -58,7 +58,7 @@ def components_demo_view(request: HttpRequest) -> HttpResponse:
         title="Blue Hoodie (Size M)",
         status="lost",
         category="Clothing",
-        location="CAW Student Centre",
+        location="C.A.W. Student Centre",
         reported_at=datetime(2026, 2, 9),
     )
 

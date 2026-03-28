@@ -42,12 +42,9 @@
           </div>
 
           <div class="mb-3">
-            {{ form.location|as_crispy_field }}
-            {% if form.location.errors %}
-              <div class="invalid-feedback d-block">{{ form.location.errors|join:", " }}</div>
-            {% endif %}
+            {% include "partials/building_select.html" with label=form.location.label input_id=form.location.id_for_label input_name=form.location.html_name options=form.fields.location.queryset selected_value=form.location.value required=form.fields.location.required errors=form.location.errors empty_label=form.fields.location.empty_label %}
             {% if not form.fields.location.queryset.exists %}
-              <div class="form-text text-warning">No active locations available. Run <code>python manage.py seed_minimal_catalogs</code>.</div>
+              <div class="form-text text-warning">No active buildings available. Run <code>python manage.py seed_minimal_catalogs</code>.</div>
             {% endif %}
           </div>
 

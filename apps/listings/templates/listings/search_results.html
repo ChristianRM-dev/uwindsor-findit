@@ -66,13 +66,7 @@
       </div>
 
       <div class="col-6 col-lg-2">
-        <label class="form-label small text-muted mb-1">Location</label>
-        <select name="location" class="form-select">
-          <option value="">All locations</option>
-          {% for l in locations %}
-            <option value="{{ l.code }}" {% if filters.location == l.code %}selected{% endif %}>{{ l.name }}</option>
-          {% endfor %}
-        </select>
+        {% include "partials/building_select.html" with label="Building" label_class="form-label small text-muted mb-1" input_id="search-building" input_name="location" options=locations selected_value=filters.location use_code_values=True empty_label="Select building" %}
       </div>
 
       <div class="col-6 col-lg-2">

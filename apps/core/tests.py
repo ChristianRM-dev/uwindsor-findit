@@ -452,9 +452,7 @@ class HomeLandingContentTests(TestCase):
         self.category = Category.objects.create(
             name="Electronics", slug="electronics", is_active=True
         )
-        self.location = CampusLocation.objects.create(
-            name="Leddy Library", code="leddy-library", is_active=True
-        )
+        self.location = CampusLocation.objects.get(code="leddy-library")
         self.url = reverse("core:home")
 
         self._create_items(status=Item.Status.LOST, count=5, prefix="Lost")

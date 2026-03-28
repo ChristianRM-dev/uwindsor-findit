@@ -139,7 +139,7 @@ class Command(BaseCommand):
             ),
             (
                 contact_user,
-                "Yes, it is a silver Dell laptop. I can meet at the CAW Student Centre this afternoon.",
+                "Yes, it is a silver Dell laptop. I can meet at the C.A.W. Student Centre this afternoon.",
             ),
         ]
 
