@@ -1,0 +1,517 @@
+[
+  {
+    "model": "listings.category",
+    "pk": 1,
+    "fields": {
+      "name": "Electronics",
+      "slug": "electronics",
+      "is_active": true,
+      "created_at": "2026-03-01T12:00:00Z",
+      "updated_at": "2026-03-01T12:00:00Z"
+    }
+  },
+  {
+    "model": "listings.category",
+    "pk": 2,
+    "fields": {
+      "name": "Clothing",
+      "slug": "clothing",
+      "is_active": true,
+      "created_at": "2026-03-01T12:01:00Z",
+      "updated_at": "2026-03-01T12:01:00Z"
+    }
+  },
+  {
+    "model": "listings.category",
+    "pk": 3,
+    "fields": {
+      "name": "Documents",
+      "slug": "documents",
+      "is_active": true,
+      "created_at": "2026-03-01T12:02:00Z",
+      "updated_at": "2026-03-01T12:02:00Z"
+    }
+  },
+  {
+    "model": "listings.category",
+    "pk": 4,
+    "fields": {
+      "name": "Accessories",
+      "slug": "accessories",
+      "is_active": true,
+      "created_at": "2026-03-01T12:03:00Z",
+      "updated_at": "2026-03-01T12:03:00Z"
+    }
+  },
+  {
+    "model": "listings.category",
+    "pk": 5,
+    "fields": {
+      "name": "Keys",
+      "slug": "keys",
+      "is_active": true,
+      "created_at": "2026-03-01T12:04:00Z",
+      "updated_at": "2026-03-01T12:04:00Z"
+    }
+  },
+  {
+    "model": "listings.category",
+    "pk": 6,
+    "fields": {
+      "name": "Bags",
+      "slug": "bags",
+      "is_active": true,
+      "created_at": "2026-03-01T12:05:00Z",
+      "updated_at": "2026-03-01T12:05:00Z"
+    }
+  },
+  {
+    "model": "listings.category",
+    "pk": 7,
+    "fields": {
+      "name": "Water Bottles",
+      "slug": "water-bottles",
+      "is_active": true,
+      "created_at": "2026-03-01T12:06:00Z",
+      "updated_at": "2026-03-01T12:06:00Z"
+    }
+  },
+  {
+    "model": "listings.category",
+    "pk": 8,
+    "fields": {
+      "name": "Other",
+      "slug": "other",
+      "is_active": true,
+      "created_at": "2026-03-01T12:07:00Z",
+      "updated_at": "2026-03-01T12:07:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 1,
+    "fields": {
+      "name": "300 Ouellette",
+      "code": "300-ouellette",
+      "is_active": true,
+      "created_at": "2026-03-01T12:11:00Z",
+      "updated_at": "2026-03-01T12:11:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 2,
+    "fields": {
+      "name": "Assumption Chapel",
+      "code": "assumption-hall",
+      "is_active": true,
+      "created_at": "2026-03-01T12:12:00Z",
+      "updated_at": "2026-03-01T12:12:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 3,
+    "fields": {
+      "name": "Centre for Automotive Research",
+      "code": "centre-for-automotive-research",
+      "is_active": true,
+      "created_at": "2026-03-01T12:13:00Z",
+      "updated_at": "2026-03-01T12:13:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 4,
+    "fields": {
+      "name": "Biology Building",
+      "code": "biology-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:14:00Z",
+      "updated_at": "2026-03-01T12:14:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 5,
+    "fields": {
+      "name": "Canterbury College",
+      "code": "canterbury-college",
+      "is_active": true,
+      "created_at": "2026-03-01T12:15:00Z",
+      "updated_at": "2026-03-01T12:15:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 6,
+    "fields": {
+      "name": "Centre For Engineering Innovation",
+      "code": "engineering-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:16:00Z",
+      "updated_at": "2026-03-01T12:16:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 7,
+    "fields": {
+      "name": "Chrysler Hall North",
+      "code": "chrysler-hall-north",
+      "is_active": true,
+      "created_at": "2026-03-01T12:17:00Z",
+      "updated_at": "2026-03-01T12:17:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 8,
+    "fields": {
+      "name": "Chrysler Hall South",
+      "code": "chrysler-hall-south",
+      "is_active": true,
+      "created_at": "2026-03-01T12:18:00Z",
+      "updated_at": "2026-03-01T12:18:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 9,
+    "fields": {
+      "name": "167 Ferry (Downtown)",
+      "code": "167-ferry-downtown",
+      "is_active": true,
+      "created_at": "2026-03-01T12:19:00Z",
+      "updated_at": "2026-03-01T12:19:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 10,
+    "fields": {
+      "name": "Drama Building",
+      "code": "drama-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:20:00Z",
+      "updated_at": "2026-03-01T12:20:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 11,
+    "fields": {
+      "name": "Dillon Hall",
+      "code": "dillon-hall",
+      "is_active": true,
+      "created_at": "2026-03-01T12:21:00Z",
+      "updated_at": "2026-03-01T12:21:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 12,
+    "fields": {
+      "name": "Neal Education Building",
+      "code": "neal-education-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:22:00Z",
+      "updated_at": "2026-03-01T12:22:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 13,
+    "fields": {
+      "name": "Essex Hall",
+      "code": "essex-hall",
+      "is_active": true,
+      "created_at": "2026-03-01T12:23:00Z",
+      "updated_at": "2026-03-01T12:23:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 14,
+    "fields": {
+      "name": "Erie Hall",
+      "code": "erie-hall",
+      "is_active": true,
+      "created_at": "2026-03-01T12:24:00Z",
+      "updated_at": "2026-03-01T12:24:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 15,
+    "fields": {
+      "name": "HK Building",
+      "code": "human-kinetics",
+      "is_active": true,
+      "created_at": "2026-03-01T12:25:00Z",
+      "updated_at": "2026-03-01T12:25:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 16,
+    "fields": {
+      "name": "Jackman Dramatic Art Centre",
+      "code": "jackman-dramatic-art-centre",
+      "is_active": true,
+      "created_at": "2026-03-01T12:26:00Z",
+      "updated_at": "2026-03-01T12:26:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 17,
+    "fields": {
+      "name": "Ianni Law Building",
+      "code": "ianni-law-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:27:00Z",
+      "updated_at": "2026-03-01T12:27:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 18,
+    "fields": {
+      "name": "LeBel Building",
+      "code": "lebel-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:28:00Z",
+      "updated_at": "2026-03-01T12:28:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 19,
+    "fields": {
+      "name": "Leddy Library",
+      "code": "leddy-library",
+      "is_active": true,
+      "created_at": "2026-03-01T12:29:00Z",
+      "updated_at": "2026-03-01T12:29:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 20,
+    "fields": {
+      "name": "Lambton Tower",
+      "code": "lambton-tower",
+      "is_active": true,
+      "created_at": "2026-03-01T12:30:00Z",
+      "updated_at": "2026-03-01T12:30:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 21,
+    "fields": {
+      "name": "O'Neil Medical Education Centre",
+      "code": "oneil-medical-education-centre",
+      "is_active": true,
+      "created_at": "2026-03-01T12:31:00Z",
+      "updated_at": "2026-03-01T12:31:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 22,
+    "fields": {
+      "name": "Memorial Hall",
+      "code": "memorial-hall",
+      "is_active": true,
+      "created_at": "2026-03-01T12:32:00Z",
+      "updated_at": "2026-03-01T12:32:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 23,
+    "fields": {
+      "name": "Music Building",
+      "code": "music-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:33:00Z",
+      "updated_at": "2026-03-01T12:33:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 24,
+    "fields": {
+      "name": "Odette Building",
+      "code": "odette-building",
+      "is_active": true,
+      "created_at": "2026-03-01T12:34:00Z",
+      "updated_at": "2026-03-01T12:34:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 25,
+    "fields": {
+      "name": "St. Denis Center",
+      "code": "st-denis-center",
+      "is_active": true,
+      "created_at": "2026-03-01T12:35:00Z",
+      "updated_at": "2026-03-01T12:35:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 26,
+    "fields": {
+      "name": "St. Francis School",
+      "code": "st-francis-school",
+      "is_active": true,
+      "created_at": "2026-03-01T12:36:00Z",
+      "updated_at": "2026-03-01T12:36:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 27,
+    "fields": {
+      "name": "Toldo Health Education Centre",
+      "code": "toldo-health-centre",
+      "is_active": true,
+      "created_at": "2026-03-01T12:37:00Z",
+      "updated_at": "2026-03-01T12:37:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 28,
+    "fields": {
+      "name": "C.A.W. Student Centre",
+      "code": "caw-student-centre",
+      "is_active": true,
+      "created_at": "2026-03-01T12:38:00Z",
+      "updated_at": "2026-03-01T12:38:00Z"
+    }
+  },
+  {
+    "model": "listings.campuslocation",
+    "pk": 29,
+    "fields": {
+      "name": "West Library",
+      "code": "west-library",
+      "is_active": true,
+      "created_at": "2026-03-01T12:39:00Z",
+      "updated_at": "2026-03-01T12:39:00Z"
+    }
+  },
+  {
+    "model": "users.user",
+    "pk": 1,
+    "fields": {
+      "password": "pbkdf2_sha256$1000000$jymJZvQIXyzgnQnY4J5SKw$9iLy4E4Yr+sr9LE6twFkx1jWB6k8HtuKHW8kIn9Iav0=",
+      "last_login": null,
+      "is_superuser": false,
+      "username": "demo.reporter@uwindsor.ca",
+      "first_name": "Campus",
+      "last_name": "Reporter",
+      "email": "demo.reporter@uwindsor.ca",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2026-03-01T12:50:00Z",
+      "student_id": "900000100",
+      "phone_number": "519-555-0100",
+      "role": "USER",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "listings.item",
+    "pk": 1,
+    "fields": {
+      "reporter": 1,
+      "item_type": "LOST",
+      "status": "LOST",
+      "title": "Rose Gold MacBook Air",
+      "description": "Rose gold MacBook Air with a clear shell case and a COMP 8347 sticker on the lid.",
+      "category": 1,
+      "location": 19,
+      "event_date": "2026-02-27T18:15:00Z",
+      "claimed_by": null,
+      "is_visible": true,
+      "created_at": "2026-03-01T13:00:00Z",
+      "updated_at": "2026-03-01T13:00:00Z"
+    }
+  },
+  {
+    "model": "listings.item",
+    "pk": 2,
+    "fields": {
+      "reporter": 1,
+      "item_type": "LOST",
+      "status": "LOST",
+      "title": "Brown Spiral Notebook",
+      "description": "Brown spiral notebook with lecture notes, color tabs, and a hand-written ECON study checklist inside.",
+      "category": 3,
+      "location": 14,
+      "event_date": "2026-02-28T15:40:00Z",
+      "claimed_by": null,
+      "is_visible": true,
+      "created_at": "2026-03-01T13:05:00Z",
+      "updated_at": "2026-03-01T13:05:00Z"
+    }
+  },
+  {
+    "model": "listings.item",
+    "pk": 3,
+    "fields": {
+      "reporter": 1,
+      "item_type": "FOUND",
+      "status": "FOUND",
+      "title": "Space Gray MacBook Pro",
+      "description": "Space gray MacBook Pro found near the food court seating area with no charger attached.",
+      "category": 1,
+      "location": 28,
+      "event_date": "2026-02-26T11:20:00Z",
+      "claimed_by": null,
+      "is_visible": true,
+      "created_at": "2026-03-01T13:10:00Z",
+      "updated_at": "2026-03-01T13:10:00Z"
+    }
+  },
+  {
+    "model": "listings.itemimage",
+    "pk": 1,
+    "fields": {
+      "item": 1,
+      "image": "items/demo/rose-gold-macbook-air.jpg",
+      "alt_text": "Rose Gold MacBook Air sample image",
+      "uploaded_by": 1,
+      "created_at": "2026-03-01T13:20:00Z"
+    }
+  },
+  {
+    "model": "listings.itemimage",
+    "pk": 2,
+    "fields": {
+      "item": 2,
+      "image": "items/demo/brown-spiral-notebook.png",
+      "alt_text": "Brown Spiral Notebook sample image",
+      "uploaded_by": 1,
+      "created_at": "2026-03-01T13:21:00Z"
+    }
+  },
+  {
+    "model": "listings.itemimage",
+    "pk": 3,
+    "fields": {
+      "item": 3,
+      "image": "items/demo/space-gray-macbook-pro.jpg",
+      "alt_text": "Space Gray MacBook Pro sample image",
+      "uploaded_by": 1,
+      "created_at": "2026-03-01T13:22:00Z"
+    }
+  }
+]

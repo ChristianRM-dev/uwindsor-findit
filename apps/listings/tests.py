@@ -25,6 +25,9 @@ from apps.listings.buildings import (
 from apps.listings.forms import ClaimCreateForm, ItemEditForm, ReportLostItemForm
 from apps.listings.models import CampusLocation, Category, Claim, ClaimProof, Item, ItemImage
 
+FIXTURE_PATH = os.path.join(os.path.dirname(__file__), "fixtures", "initial_data.json")
+SAMPLE_MEDIA_DIR = os.path.join(os.path.dirname(__file__), "sample_media", "items")
+
 
 class OfficialCampusLocationCatalogTests(TestCase):
     def setUp(self):
@@ -84,27 +87,6 @@ class OfficialCampusLocationCatalogTests(TestCase):
         self.assertEqual(item.location, canonical_caw)
         self.assertEqual(claim.lost_location, canonical_caw)
 
-    def test_seed_command_creates_official_catalog_and_official_sample_locations(self):
-        output = io.StringIO()
-
-        call_command("seed_minimal_catalogs", stdout=output)
-
-        self.assertEqual(CampusLocation.objects.count(), len(OFFICIAL_CAMPUS_BUILDINGS))
-        self.assertTrue(CampusLocation.objects.filter(name="C.A.W. Student Centre", code="caw-student-centre").exists())
-        self.assertTrue(CampusLocation.objects.filter(name="HK Building", code="human-kinetics").exists())
-        self.assertTrue(
-            CampusLocation.objects.filter(
-                name="Centre For Engineering Innovation",
-                code="engineering-building",
-            ).exists()
-        )
-        self.assertTrue(CampusLocation.objects.filter(name="Assumption Chapel", code="assumption-hall").exists())
-        self.assertEqual(Item.objects.get(title="Blue Hydro Flask Bottle").location.name, "HK Building")
-        self.assertEqual(
-            Item.objects.get(title="TI-84 Calculator").location.name,
-            "Centre For Engineering Innovation",
-        )
-
     def test_forms_and_search_use_same_building_catalog(self):
         sync_official_campus_locations()
 
@@ -146,6 +128,96 @@ class OfficialCampusLocationCatalogTests(TestCase):
         self.assertEqual(claim_form.fields["where_lost_location"].empty_label, BUILDING_EMPTY_LABEL)
         self.assertEqual(edit_form.fields["location"].empty_label, BUILDING_EMPTY_LABEL)
         self.assertContains(search_response, BUILDING_EMPTY_LABEL)
+
+
+class InitialDataFixtureTests(TestCase):
+    def setUp(self):
+        self.media_root = tempfile.mkdtemp(prefix="findit-fixture-test-media-")
+        self.override = override_settings(MEDIA_ROOT=self.media_root)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(lambda: shutil.rmtree(self.media_root, ignore_errors=True))
+
+        demo_media_dir = os.path.join(self.media_root, "items", "demo")
+        os.makedirs(demo_media_dir, exist_ok=True)
+        for filename in os.listdir(SAMPLE_MEDIA_DIR):
+            shutil.copy(
+                os.path.join(SAMPLE_MEDIA_DIR, filename),
+                os.path.join(demo_media_dir, filename),
+            )
+
+        call_command("loaddata", FIXTURE_PATH, verbosity=0)
+
+    def test_fixture_loads_official_catalog_demo_user_and_sample_items(self):
+        self.assertEqual(Category.objects.count(), 8)
+        self.assertEqual(CampusLocation.objects.count(), len(OFFICIAL_CAMPUS_BUILDINGS))
+        self.assertEqual(Item.objects.count(), 3)
+        self.assertEqual(ItemImage.objects.count(), 3)
+
+        self.assertTrue(
+            CampusLocation.objects.filter(
+                name="C.A.W. Student Centre",
+                code="caw-student-centre",
+            ).exists()
+        )
+        self.assertTrue(
+            CampusLocation.objects.filter(
+                name="Assumption Chapel",
+                code="assumption-hall",
+            ).exists()
+        )
+        self.assertTrue(
+            get_user_model().objects.filter(
+                email="demo.reporter@uwindsor.ca",
+                student_id="900000100",
+                is_active=True,
+            ).exists()
+        )
+
+        lost_laptop = Item.objects.get(title="Rose Gold MacBook Air")
+        lost_notebook = Item.objects.get(title="Brown Spiral Notebook")
+        found_laptop = Item.objects.get(title="Space Gray MacBook Pro")
+
+        self.assertEqual(lost_laptop.status, Item.Status.LOST)
+        self.assertEqual(lost_laptop.location.code, "leddy-library")
+        self.assertEqual(lost_notebook.status, Item.Status.LOST)
+        self.assertEqual(lost_notebook.location.code, "erie-hall")
+        self.assertEqual(found_laptop.status, Item.Status.FOUND)
+        self.assertEqual(found_laptop.location.code, "caw-student-centre")
+
+        self.assertEqual(
+            list(ItemImage.objects.order_by("pk").values_list("image", flat=True)),
+            [
+                "items/demo/rose-gold-macbook-air.jpg",
+                "items/demo/brown-spiral-notebook.png",
+                "items/demo/space-gray-macbook-pro.jpg",
+            ],
+        )
+        self.assertTrue(
+            self.client.login(
+                username="demo.reporter@uwindsor.ca",
+                password="DemoPass123!",
+            )
+        )
+
+    def test_fixture_data_renders_on_home_search_and_detail_pages(self):
+        home_response = self.client.get(reverse("core:home"))
+        search_response = self.client.get(reverse("listings:search_results"))
+        detail_response = self.client.get(
+            reverse("listings:item_detail_public", kwargs={"pk": 1})
+        )
+
+        self.assertEqual(home_response.status_code, 200)
+        self.assertContains(home_response, "Rose Gold MacBook Air")
+        self.assertContains(home_response, "Space Gray MacBook Pro")
+
+        self.assertEqual(search_response.status_code, 200)
+        self.assertContains(search_response, "Rose Gold MacBook Air")
+        self.assertContains(search_response, "Brown Spiral Notebook")
+        self.assertContains(search_response, "Space Gray MacBook Pro")
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertContains(detail_response, "/media/items/demo/rose-gold-macbook-air.jpg")
 
 
 class ReportLostItemViewTests(TestCase):

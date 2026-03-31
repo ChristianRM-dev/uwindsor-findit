@@ -5,7 +5,7 @@ This project supports Docker-first development, local Python setup, and a Render
 ## Requirements
 
 - Python **3.12** if running locally
-- Docker + Docker Compose for the recommended Postgres workflow
+- Docker + Docker Compose if you want a Postgres workflow
 - Git
 
 ## Option A — VS Code DevContainer
@@ -68,22 +68,28 @@ DJANGO_SECRET_KEY=change-me
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,0.0.0.0,testserver
 DJANGO_CSRF_TRUSTED_ORIGINS=http://127.0.0.1,http://localhost
 DJANGO_SERVE_MEDIA_LOCALLY=true
-DATABASE_URL=postgresql://findit:findit@localhost:5432/findit
 ```
 
-### 4) Start Postgres
+If you do not set `DATABASE_URL`, Django will use the default local SQLite database at `db.sqlite3`.
 
-Recommended even for local Python:
+### 4) Load the initial fixture data
 
 ```bash
-docker compose up -d db
+python manage.py migrate
+mkdir -p storage/items/demo
+cp apps/listings/sample_media/items/* storage/items/demo/
+python manage.py loaddata apps/listings/fixtures/initial_data.json
+```
+
+Demo login created by the fixture:
+
+```text
+demo.reporter@uwindsor.ca / DemoPass123!
 ```
 
 ### 5) Run the app
 
 ```bash
-python manage.py migrate
-python manage.py seed_minimal_catalogs
 python manage.py runserver
 ```
 
@@ -133,7 +139,8 @@ pip install -r requirements/prod.txt && python manage.py collectstatic --noinput
 ./scripts/render-start.sh
 ```
 
-The start script runs migrations and demo seeds before starting Gunicorn because Render free tier does not support `preDeployCommand`.
+The start script runs migrations before starting Gunicorn because Render free tier does not support `preDeployCommand`.
+Load demo data manually with `loaddata` if you want sample content in a fresh Render database.
 
 Render Free also blocks SMTP ports, so email is sent through Resend's HTTP API when `EMAIL_PROVIDER=resend`.
 Resend requires a verified sender domain before you can send password reset or verification emails to real users.
@@ -148,6 +155,9 @@ Resend requires a verified sender domain before you can send password reset or v
 ```bash
 python manage.py check
 python manage.py migrate
+mkdir -p storage/items/demo
+cp apps/listings/sample_media/items/* storage/items/demo/
+python manage.py loaddata apps/listings/fixtures/initial_data.json
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
 python manage.py test apps.core.tests apps.chat.tests apps.listings.tests
@@ -169,4 +179,16 @@ This deletes all local Postgres data:
 ```bash
 docker compose down -v
 docker compose up --build
+```
+
+### Reset local SQLite demo data
+
+```bash
+rm -f db.sqlite3
+rm -rf storage
+python manage.py migrate
+mkdir -p storage/items/demo
+cp apps/listings/sample_media/items/* storage/items/demo/
+python manage.py loaddata apps/listings/fixtures/initial_data.json
+python manage.py runserver
 ```
