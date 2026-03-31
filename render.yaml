@@ -20,12 +20,6 @@ services:
         value: https://uwindsor-findit-dev.onrender.com
       - key: DJANGO_SERVE_MEDIA_LOCALLY
         value: "true"
-      - key: EMAIL_PROVIDER
-        value: resend
-      - key: RESEND_API_KEY
-        sync: false
-      - key: DJANGO_DEFAULT_FROM_EMAIL
-        sync: false
       - key: REQUIRE_EMAIL_VERIFICATION
         value: "true"
       - key: DATABASE_URL

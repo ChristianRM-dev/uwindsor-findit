@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.template.loader import render_to_string
 
@@ -34,12 +33,15 @@ def send_verification_email(request, user) -> None:
     verify_url = build_absolute_uri(request, verify_path)
 
     subject = render_to_string("users/emails/verify_email_subject.txt", {}).strip()
-    body = render_to_string("users/emails/verify_email_body.txt", {"verify_url": verify_url})
+    context = {"verify_url": verify_url}
+    body = render_to_string("users/emails/verify_email_body.txt", context)
+    html_body = render_to_string("users/emails/verify_email_body.html", context)
 
-    send_mail(
+    message = EmailMultiAlternatives(
         subject=subject,
-        message=body,
+        body=body,
         from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-        recipient_list=[user.email],
-        fail_silently=False,
+        to=[user.email],
     )
+    message.attach_alternative(html_body, "text/html")
+    message.send(fail_silently=False)

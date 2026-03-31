@@ -7,6 +7,10 @@ from django.contrib.auth import get_user_model
 from .email_verification import send_verification_email
 
 
+class VerificationEmailDeliveryError(Exception):
+    """Raised when the verification email could not be sent."""
+
+
 def require_email_verification() -> bool:
     return getattr(settings, "REQUIRE_EMAIL_VERIFICATION", False)
 
@@ -36,7 +40,12 @@ def handle_post_registration(request, user, raw_password: str):
     - Else: returns {"verification_required": False, "authed_user": <User|None>}
     """
     if require_email_verification():
-        send_verification_email(request, user)
+        try:
+            send_verification_email(request, user)
+        except Exception as exc:
+            raise VerificationEmailDeliveryError(
+                "Verification email delivery failed."
+            ) from exc
         return {"verification_required": True}
 
     authed = try_authenticate_user(request, user, raw_password)

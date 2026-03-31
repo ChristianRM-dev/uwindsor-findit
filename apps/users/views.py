@@ -10,13 +10,17 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 
 from .forms import ProfileUpdateForm, RegisterForm
-from .services.registration import create_user_from_register_form, handle_post_registration
 from .services.email_verification import unsign_verification_token
 from .services.login_security import (
     clear_failed_login,
     format_lockout_message,
     get_lockout_remaining_seconds,
     record_failed_login,
+)
+from .services.registration import (
+    VerificationEmailDeliveryError,
+    create_user_from_register_form,
+    handle_post_registration,
 )
 
 
@@ -32,7 +36,15 @@ def register_view(request: HttpRequest) -> HttpResponse:
             user = create_user_from_register_form(form)
             raw_password = form.cleaned_data.get("password1")
 
-            result = handle_post_registration(request, user, raw_password)
+            try:
+                result = handle_post_registration(request, user, raw_password)
+            except VerificationEmailDeliveryError:
+                user.delete()
+                messages.error(
+                    request,
+                    "We could not send the verification email. Check the email configuration and try again.",
+                )
+                return render(request, "users/register.html", {"form": form})
 
             if result["verification_required"]:
                 messages.info(

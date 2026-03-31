@@ -10,6 +10,11 @@ from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.core.email_config import (
+    API_EMAIL_BACKEND,
+    CONSOLE_EMAIL_BACKEND,
+    resolve_email_backend,
+)
 from apps.core.email_backends import ApiEmailBackend
 from apps.core.models import Notification, UserActivity
 from apps.listings.models import CampusLocation, Category, Claim, Item
@@ -17,25 +22,26 @@ from apps.listings.models import CampusLocation, Category, Claim, Item
 
 class ApiEmailBackendTests(SimpleTestCase):
     @override_settings(
-        EMAIL_PROVIDER="resend",
-        RESEND_API_KEY="re_test_key",
-        DEFAULT_FROM_EMAIL="FindIt <no-reply@example.com>",
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="xkeysib-test-key",
+        DEFAULT_FROM_EMAIL="FindIt UWindsor <no-reply@example.com>",
     )
-    def test_resend_backend_posts_expected_payload(self):
+    def test_brevo_backend_posts_expected_payload(self):
         backend = ApiEmailBackend()
         message = EmailMultiAlternatives(
             subject="Password reset",
             body="Reset your password",
-            to=["student@example.com"],
+            to=["John Doe <student@example.com>"],
             cc=["advisor@example.com"],
             bcc=["audit@example.com"],
-            reply_to=["support@example.com"],
-            headers={"X-Entity-Ref-ID": "thread-123"},
+            reply_to=["Support Team <support@example.com>"],
+            headers={"X-Mailin-custom": "workflow:verification"},
         )
         message.attach_alternative("<p>Reset your password</p>", "text/html")
+        message.attach("note.txt", "Attachment body", "text/plain")
 
         response = MagicMock()
-        response.read.return_value = b'{"id":"email_123"}'
+        response.read.return_value = b'{"messageId":"<123@example.com>"}'
         response.__enter__.return_value = response
         response.__exit__.return_value = False
 
@@ -49,22 +55,27 @@ class ApiEmailBackendTests(SimpleTestCase):
         request = mocked_urlopen.call_args.args[0]
         payload = json.loads(request.data.decode("utf-8"))
 
-        self.assertEqual(payload["from"], "FindIt <no-reply@example.com>")
-        self.assertEqual(payload["to"], ["student@example.com"])
-        self.assertEqual(payload["cc"], ["advisor@example.com"])
-        self.assertEqual(payload["bcc"], ["audit@example.com"])
-        self.assertEqual(payload["reply_to"], ["support@example.com"])
+        self.assertEqual(payload["sender"]["email"], "no-reply@example.com")
+        self.assertEqual(payload["sender"]["name"], "FindIt UWindsor")
+        self.assertEqual(payload["to"], [{"email": "student@example.com", "name": "John Doe"}])
+        self.assertEqual(payload["cc"], [{"email": "advisor@example.com"}])
+        self.assertEqual(payload["bcc"], [{"email": "audit@example.com"}])
+        self.assertEqual(
+            payload["replyTo"],
+            {"email": "support@example.com", "name": "Support Team"},
+        )
         self.assertEqual(payload["subject"], "Password reset")
-        self.assertEqual(payload["text"], "Reset your password")
-        self.assertEqual(payload["html"], "<p>Reset your password</p>")
-        self.assertEqual(payload["headers"]["X-Entity-Ref-ID"], "thread-123")
+        self.assertEqual(payload["textContent"], "Reset your password")
+        self.assertEqual(payload["htmlContent"], "<p>Reset your password</p>")
+        self.assertEqual(payload["headers"]["X-Mailin-custom"], "workflow:verification")
+        self.assertEqual(payload["attachment"][0]["name"], "note.txt")
 
     @override_settings(
-        EMAIL_PROVIDER="resend",
-        RESEND_API_KEY="",
-        DEFAULT_FROM_EMAIL="FindIt <no-reply@example.com>",
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="",
+        DEFAULT_FROM_EMAIL="FindIt UWindsor <no-reply@example.com>",
     )
-    def test_resend_backend_requires_api_key(self):
+    def test_brevo_backend_requires_api_key(self):
         backend = ApiEmailBackend()
         message = EmailMultiAlternatives(
             subject="Hello",
@@ -74,6 +85,60 @@ class ApiEmailBackendTests(SimpleTestCase):
 
         with self.assertRaises(ImproperlyConfigured):
             backend.send_messages([message])
+
+    @override_settings(
+        EMAIL_PROVIDER="brevo",
+        BREVO_API_KEY="xkeysib-test-key",
+        DEFAULT_FROM_EMAIL="FindIt UWindsor <no-reply@example.com>",
+        EMAIL_DEBUG=True,
+    )
+    def test_brevo_backend_logs_request_summary_and_response_when_debug_enabled(self):
+        backend = ApiEmailBackend()
+        message = EmailMultiAlternatives(
+            subject="Debug run",
+            body="Debug body",
+            to=["student@example.com"],
+        )
+
+        response = MagicMock()
+        response.status = 201
+        response.read.return_value = b'{"messageId":"<debug@example.com>"}'
+        response.__enter__.return_value = response
+        response.__exit__.return_value = False
+
+        with patch(
+            "apps.core.email_backends.urlopen",
+            return_value=response,
+        ), self.assertLogs("apps.core.email_backends", level="INFO") as captured_logs:
+            backend.send_messages([message])
+
+        combined_logs = "\n".join(captured_logs.output)
+        self.assertIn("Brevo email request", combined_logs)
+        self.assertIn("student@example.com", combined_logs)
+        self.assertIn("Brevo email response", combined_logs)
+        self.assertIn("messageId", combined_logs)
+
+
+class EmailConfigTests(SimpleTestCase):
+    def test_explicit_backend_takes_priority_over_provider_inference(self):
+        backend = resolve_email_backend(
+            {
+                "EMAIL_PROVIDER": "brevo",
+                "DJANGO_EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend",
+            }
+        )
+
+        self.assertEqual(backend, "django.core.mail.backends.locmem.EmailBackend")
+
+    def test_brevo_provider_uses_api_backend(self):
+        backend = resolve_email_backend({"EMAIL_PROVIDER": "brevo"})
+
+        self.assertEqual(backend, API_EMAIL_BACKEND)
+
+    def test_console_backend_is_default_without_email_provider(self):
+        backend = resolve_email_backend({})
+
+        self.assertEqual(backend, CONSOLE_EMAIL_BACKEND)
 
 
 class HealthViewTests(TestCase):

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -47,6 +49,37 @@ class RegistrationAndLoginViewTests(TestCase):
         self.assertEqual(user.phone_number, "519-555-8899")
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("/auth/verify-email/", mail.outbox[0].body)
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        self.assertEqual(mail.outbox[0].alternatives[0].mimetype, "text/html")
+        self.assertIn('href="http://testserver/auth/verify-email/', mail.outbox[0].alternatives[0].content)
+
+    @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
+    def test_register_shows_error_and_rolls_back_user_when_email_delivery_fails(self):
+        with patch(
+            "apps.users.services.registration.send_verification_email",
+            side_effect=RuntimeError("SMTP auth failed"),
+        ):
+            response = self.client.post(
+                self.register_url,
+                {
+                    "email": "retryme@uwindsor.ca",
+                    "first_name": "Retry",
+                    "last_name": "Student",
+                    "student_id": "123456789",
+                    "phone_number": "519-555-1212",
+                    "password1": "StrongPass123!",
+                    "password2": "StrongPass123!",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "We could not send the verification email. Check the email configuration and try again.",
+        )
+        self.assertFalse(
+            get_user_model().objects.filter(email="retryme@uwindsor.ca").exists()
+        )
 
     @override_settings(REQUIRE_EMAIL_VERIFICATION=True)
     def test_register_rejects_invalid_student_id_and_phone(self):

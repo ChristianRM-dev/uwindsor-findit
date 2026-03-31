@@ -22,11 +22,7 @@ class ChatViewsTests(TestCase):
             password="DemoPass123!",
         )
         self.category = Category.objects.create(name="Bags", slug="bags", is_active=True)
-        self.location = CampusLocation.objects.create(
-            name="Lambton Tower",
-            code="lambton-tower",
-            is_active=True,
-        )
+        self.location = CampusLocation.objects.get(code="lambton-tower")
         self.item = Item.objects.create(
             reporter=self.owner,
             item_type=Item.ItemType.LOST,

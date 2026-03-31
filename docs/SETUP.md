@@ -5,7 +5,7 @@ This project supports Docker-first development, local Python setup, and a Render
 ## Requirements
 
 - Python **3.12** if running locally
-- Docker + Docker Compose for the recommended Postgres workflow
+- Docker + Docker Compose if you want a Postgres workflow
 - Git
 
 ## Option A — VS Code DevContainer
@@ -68,22 +68,46 @@ DJANGO_SECRET_KEY=change-me
 DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,0.0.0.0,testserver
 DJANGO_CSRF_TRUSTED_ORIGINS=http://127.0.0.1,http://localhost
 DJANGO_SERVE_MEDIA_LOCALLY=true
-DATABASE_URL=postgresql://findit:findit@localhost:5432/findit
 ```
 
-### 4) Start Postgres
+If you do not set `DATABASE_URL`, Django will use the default local SQLite database at `db.sqlite3`.
 
-Recommended even for local Python:
+To send real emails locally with the Brevo API, add these values to `.env`:
+
+```env
+EMAIL_PROVIDER=brevo
+BREVO_API_KEY=your-brevo-api-key
+BREVO_API_URL=https://api.brevo.com/v3/smtp/email
+BREVO_REQUEST_TIMEOUT=10
+EMAIL_DEBUG=true
+DJANGO_DEFAULT_FROM_EMAIL=FindIt UWindsor <your-verified-sender@example.com>
+```
+
+Important notes:
+
+- Use your Brevo API key for transactional email, not your SMTP credentials or Brevo account password.
+- `DJANGO_DEFAULT_FROM_EMAIL` must match a sender or domain already verified in Brevo.
+- Set `EMAIL_DEBUG=true` while testing to log the sender, recipients, subject, and Brevo response `messageId` in your `runserver` output.
+- If `EMAIL_PROVIDER` is left empty, Django will keep using the console backend locally.
+
+### 4) Load the initial fixture data
 
 ```bash
-docker compose up -d db
+python manage.py migrate
+mkdir -p storage/items/demo
+cp apps/listings/sample_media/items/* storage/items/demo/
+python manage.py loaddata apps/listings/fixtures/initial_data.json
+```
+
+Demo login created by the fixture:
+
+```text
+demo.reporter@uwindsor.ca / DemoPass123!
 ```
 
 ### 5) Run the app
 
 ```bash
-python manage.py migrate
-python manage.py seed_minimal_catalogs
 python manage.py runserver
 ```
 
@@ -107,11 +131,7 @@ This repo includes a Blueprint at [render.yaml](../render.yaml) and CI at [.gith
 2. In Render, choose **New > Blueprint** and select this repository.
 3. Accept the default service and database names unless you also update the host env vars in `render.yaml`.
 4. Choose the free plans for the web service and Postgres.
-5. Provide the Resend values Render prompts for:
-   - `RESEND_API_KEY`
-   - `DJANGO_DEFAULT_FROM_EMAIL`
-6. Verify the sender domain in Resend and make sure `DJANGO_DEFAULT_FROM_EMAIL` uses that domain.
-7. After the first deploy, verify:
+5. After the first deploy, verify:
 
 ```text
 https://uwindsor-findit-dev.onrender.com/health/
@@ -133,10 +153,10 @@ pip install -r requirements/prod.txt && python manage.py collectstatic --noinput
 ./scripts/render-start.sh
 ```
 
-The start script runs migrations and demo seeds before starting Gunicorn because Render free tier does not support `preDeployCommand`.
+The start script runs migrations before starting Gunicorn because Render free tier does not support `preDeployCommand`.
+Load demo data manually with `loaddata` if you want sample content in a fresh Render database.
 
-Render Free also blocks SMTP ports, so email is sent through Resend's HTTP API when `EMAIL_PROVIDER=resend`.
-Resend requires a verified sender domain before you can send password reset or verification emails to real users.
+The included Render blueprint does not configure a real email provider. Unless you add one yourself, deployed environments will use Django's console email backend.
 
 ### Demo limitations
 
@@ -148,6 +168,9 @@ Resend requires a verified sender domain before you can send password reset or v
 ```bash
 python manage.py check
 python manage.py migrate
+mkdir -p storage/items/demo
+cp apps/listings/sample_media/items/* storage/items/demo/
+python manage.py loaddata apps/listings/fixtures/initial_data.json
 python manage.py collectstatic --noinput
 python manage.py createsuperuser
 python manage.py test apps.core.tests apps.chat.tests apps.listings.tests
@@ -169,4 +192,16 @@ This deletes all local Postgres data:
 ```bash
 docker compose down -v
 docker compose up --build
+```
+
+### Reset local SQLite demo data
+
+```bash
+rm -f db.sqlite3
+rm -rf storage
+python manage.py migrate
+mkdir -p storage/items/demo
+cp apps/listings/sample_media/items/* storage/items/demo/
+python manage.py loaddata apps/listings/fixtures/initial_data.json
+python manage.py runserver
 ```
