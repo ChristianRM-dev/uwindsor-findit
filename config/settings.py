@@ -32,6 +32,8 @@ if load_dotenv is not None:
 # Allow importing apps as "apps.<name>"
 sys.path.append(str(BASE_DIR))
 
+from apps.core.email_config import resolve_email_backend
+
 
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
@@ -230,17 +232,12 @@ LOGIN_REDIRECT_URL = "/dashboard/"
 LOGOUT_REDIRECT_URL = "/"
 
 # Email settings
-EMAIL_BACKEND = os.getenv("DJANGO_EMAIL_BACKEND", "")
-if not EMAIL_BACKEND:
-    if EMAIL_PROVIDER == "resend":
-        EMAIL_BACKEND = "apps.core.email_backends.ApiEmailBackend"
-    else:
-        EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-
+EMAIL_BACKEND = resolve_email_backend(os.environ)
 DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "no-reply@findit.local")
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-RESEND_API_URL = os.getenv("RESEND_API_URL", "https://api.resend.com/emails")
-RESEND_REQUEST_TIMEOUT = float(os.getenv("RESEND_REQUEST_TIMEOUT", "10"))
+BREVO_API_KEY = os.getenv("BREVO_API_KEY", "")
+BREVO_API_URL = os.getenv("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
+BREVO_REQUEST_TIMEOUT = float(os.getenv("BREVO_REQUEST_TIMEOUT", "10"))
+EMAIL_DEBUG = env_bool("EMAIL_DEBUG", False)
 EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("DJANGO_EMAIL_HOST_USER", "")
@@ -274,3 +271,21 @@ SECURE_REFERRER_POLICY = "same-origin"
 
 CRISPY_ALLOWED_TEMPLATE_PACKS = ("bootstrap5",)
 CRISPY_TEMPLATE_PACK = "bootstrap5"
+
+if EMAIL_DEBUG:
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+            }
+        },
+        "loggers": {
+            "apps.core.email_backends": {
+                "handlers": ["console"],
+                "level": "INFO",
+                "propagate": False,
+            }
+        },
+    }
